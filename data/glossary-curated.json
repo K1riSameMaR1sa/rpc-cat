@@ -1,0 +1,962 @@
+{
+  "note": "Curated terminology harvested from the RPC Authority wiki index pages. Link titles are paired by target slug, so the pairing is the translators' own. Edit freely — npm run make-glossary merges this with terms mined from the translation memory.",
+  "generatedBy": "scripts/harvest-terms.mjs",
+  "sources": [
+    {
+      "en": "https://rpc-wiki.net/terminology-index",
+      "zh": "https://rpc-wiki-cn.wikidot.com/terminology-index"
+    },
+    {
+      "en": "https://rpc-wiki.net/object-classes",
+      "zh": "https://rpc-wiki-cn.wikidot.com/object-classes"
+    },
+    {
+      "en": "https://rpc-wiki.net/threats-hazards",
+      "zh": "https://rpc-wiki-cn.wikidot.com/threats-hazards"
+    },
+    {
+      "en": "https://rpc-wiki.net/security-clearance-levels",
+      "zh": "https://rpc-wiki-cn.wikidot.com/security-clearance-levels"
+    },
+    {
+      "en": "https://rpc-wiki.net/list-of-all-msts",
+      "zh": "https://rpc-wiki-cn.wikidot.com/mst-registry"
+    },
+    {
+      "en": "https://rpc-wiki.net/groups-of-interest",
+      "zh": "https://rpc-wiki-cn.wikidot.com/groups-of-interest"
+    },
+    {
+      "en": "https://rpc-wiki.net/governments-of-interest",
+      "zh": "https://rpc-wiki-cn.wikidot.com/governments-of-interest"
+    },
+    {
+      "en": "https://rpc-wiki.net/alternate-realities",
+      "zh": "https://rpc-wiki-cn.wikidot.com/alternate-realities"
+    },
+    {
+      "en": "https://rpc-wiki.net/site-index",
+      "zh": "https://rpc-wiki-cn.wikidot.com/site-index"
+    },
+    {
+      "en": "https://rpc-wiki.net/personnel-dossier",
+      "zh": "https://rpc-wiki-cn.wikidot.com/personnel-dossier"
+    },
+    {
+      "en": "https://rpc-wiki.net/directorate",
+      "zh": "https://rpc-wiki-cn.wikidot.com/directorate"
+    },
+    {
+      "en": "https://rpc-wiki.net/about-the-rpc-authority",
+      "zh": "https://rpc-wiki-cn.wikidot.com/about-the-rpc-authority"
+    },
+    {
+      "en": "https://rpc-wiki.net/acs-guide",
+      "zh": "https://rpc-wiki-cn.wikidot.com/acs-guide"
+    },
+    {
+      "en": "https://rpc-wiki.net/amnestics",
+      "zh": "https://rpc-wiki-cn.wikidot.com/amnestics"
+    },
+    {
+      "en": "https://rpc-wiki.net/viderics-guide",
+      "zh": "https://rpc-wiki-cn.wikidot.com/viderics-guide"
+    },
+    {
+      "en": "https://rpc-wiki.net/memotics-hub",
+      "zh": "https://rpc-wiki-cn.wikidot.com/memotics-hub"
+    },
+    {
+      "en": "https://rpc-wiki.net/authority-departmental-hierarchy",
+      "zh": "https://rpc-wiki-cn.wikidot.com/authority-departmental-hierarchy"
+    },
+    {
+      "en": "https://rpc-wiki.net/operational-districts",
+      "zh": "https://rpc-wiki-cn.wikidot.com/operational-districts"
+    },
+    {
+      "en": "https://rpc-wiki.net/authority-security-force",
+      "zh": "https://rpc-wiki-cn.wikidot.com/authority-security-force"
+    },
+    {
+      "en": "https://rpc-wiki.net/authority-central-intelligence",
+      "zh": "https://rpc-wiki-cn.wikidot.com/authority-central-intelligence"
+    },
+    {
+      "en": "https://rpc-wiki.net/office-of-financial-affairs",
+      "zh": "https://rpc-wiki-cn.wikidot.com/office-of-financial-affairs"
+    },
+    {
+      "en": "https://rpc-wiki.net/global-operations",
+      "zh": "https://rpc-wiki-cn.wikidot.com/global-operations"
+    },
+    {
+      "en": "https://rpc-wiki.net/authority-regional-sites",
+      "zh": "https://rpc-wiki-cn.wikidot.com/authority-regional-sites"
+    }
+  ],
+  "count": 104,
+  "terms": [
+    {
+      "en": "[COLLECTING DATA IN PROGRESS]",
+      "zh": "[正在收集数据]",
+      "variants": [
+        "NORTHCOM",
+        "SOUTHCOM",
+        "WESTCOM",
+        "EASTCOM",
+        "EURACOM",
+        "ASIACOM",
+        "ANTCCOM"
+      ],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Africa Command",
+      "zh": "非洲指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "AFRICOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Aggression Hazard",
+      "zh": "敌意危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Amnestics",
+      "zh": "记忆删除",
+      "variants": [],
+      "sources": [
+        "operational-districts",
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "Antarctica Command",
+      "zh": "南极指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "ANTCCOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "ARCHITECT",
+      "zh": "建筑师",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Asia Command",
+      "zh": "亚洲指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "ASIACOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Authority Departmental Hierarchy",
+      "zh": "管理局部门结构",
+      "variants": [],
+      "sources": [
+        "authority-departmental-hierarchy",
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "Ballistic Hazard",
+      "zh": "弹道危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Bio-Hazard",
+      "zh": "生物危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Branches",
+      "zh": "分部",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "Bundesokkultabteilung",
+      "zh": "联邦神秘学机关",
+      "variants": [],
+      "sources": [
+        "governments-of-interest"
+      ]
+    },
+    {
+      "en": "Canon Policy",
+      "zh": "设定规则",
+      "variants": [],
+      "sources": [
+        "alternate-realities",
+        "governments-of-interest",
+        "groups-of-interest"
+      ]
+    },
+    {
+      "en": "Classification",
+      "zh": "分类",
+      "variants": [],
+      "sources": [
+        "amnestics"
+      ]
+    },
+    {
+      "en": "Climatological Hazard",
+      "zh": "气候危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "COMMANDER",
+      "zh": "指挥官",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Comprehensive List of Facilities",
+      "zh": "综合设施列表",
+      "variants": [],
+      "sources": [
+        "site-index"
+      ]
+    },
+    {
+      "en": "Contact Hazard",
+      "zh": "接触危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Corrosive Hazard",
+      "zh": "腐蚀危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Defunct Regional Commands",
+      "zh": "已废除的地域指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "Description",
+      "zh": "描述",
+      "variants": [],
+      "sources": [
+        "amnestics"
+      ]
+    },
+    {
+      "en": "Designation",
+      "zh": "编号",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "Destabilization Hazard",
+      "zh": "失稳危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Directorate Timeline",
+      "zh": "理事会成员",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "DISCLAIMER",
+      "zh": "声明",
+      "variants": [],
+      "sources": [
+        "authority-departmental-hierarchy"
+      ]
+    },
+    {
+      "en": "Districts",
+      "zh": "行动区",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "Divisional Representatives",
+      "zh": "部门代表",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Divisions",
+      "zh": "部门",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "EASTCOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Eastern Command",
+      "zh": "东方指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Electromagnetic Force Hazard",
+      "zh": "电磁力危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Elysian Plane",
+      "zh": "仙境平面",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "EURACOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Eurasia Command",
+      "zh": "欧亚指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Explained (EX)",
+      "zh": "已解明（EX）",
+      "variants": [],
+      "sources": [
+        "object-classes"
+      ]
+    },
+    {
+      "en": "Explosive Hazard",
+      "zh": "爆炸危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Extra-Dimensional Hazard",
+      "zh": "超维度危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Extreme Temperature Hazard",
+      "zh": "极温危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Further Reading",
+      "zh": "更多信息",
+      "variants": [],
+      "sources": [
+        "governments-of-interest"
+      ]
+    },
+    {
+      "en": "GD-CMDR \"Lightning Rod\"",
+      "zh": "GD-CMDR - “避雷针”",
+      "variants": [],
+      "sources": [
+        "personnel-dossier"
+      ]
+    },
+    {
+      "en": "GD-SCHL \"FATHER\"",
+      "zh": "GD-SCHL「神父」",
+      "variants": [],
+      "sources": [
+        "personnel-dossier"
+      ]
+    },
+    {
+      "en": "Geological Hazard",
+      "zh": "地理危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Global Directors",
+      "zh": "全球督察",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Global Operations",
+      "zh": "全球行动层级介绍",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "Gravitational Hazard",
+      "zh": "引力危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Grouped Hazard",
+      "zh": "群体危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Headquarters",
+      "zh": "总部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "here",
+      "zh": "这里",
+      "variants": [],
+      "sources": [
+        "personnel-dossier"
+      ]
+    },
+    {
+      "en": "Hierarchy & Structure",
+      "zh": "结构层级",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "Invisibility Hazard",
+      "zh": "隐形危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Jurisdictions",
+      "zh": "管辖范围",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Leadership",
+      "zh": "领导层",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "Lexicon Auctoritas",
+      "zh": "管理局辞海",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "Lore Team",
+      "zh": "设定规则",
+      "variants": [],
+      "sources": [
+        "list-of-all-msts"
+      ]
+    },
+    {
+      "en": "Memotics",
+      "zh": "记忆学",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "National Authority Accords",
+      "zh": "管理局地域权力自治条例",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Neutralized (NT)",
+      "zh": "无效化（NT）",
+      "variants": [],
+      "sources": [
+        "object-classes"
+      ]
+    },
+    {
+      "en": "NORTHCOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Northern Command",
+      "zh": "北方指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "OCEACOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Oceania Command",
+      "zh": "大洋指挥部",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Oceanic Command",
+      "zh": "大洋指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "Operational Districts",
+      "zh": "行动区",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Overview",
+      "zh": "概述",
+      "variants": [
+        "概览",
+        "简介"
+      ],
+      "sources": [
+        "alternate-realities",
+        "authority-regional-sites",
+        "directorate",
+        "global-operations",
+        "governments-of-interest",
+        "groups-of-interest",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Personality Archetype",
+      "zh": "人物性格",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Power and Impeachment",
+      "zh": "权力与弹劾",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Psychotronic Hazard",
+      "zh": "心电危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Radiation Hazard",
+      "zh": "辐射危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "region",
+      "zh": "区域",
+      "variants": [],
+      "sources": [
+        "site-index"
+      ]
+    },
+    {
+      "en": "Regional Commands",
+      "zh": "地域指挥部",
+      "variants": [],
+      "sources": [
+        "global-operations"
+      ]
+    },
+    {
+      "en": "Regional Directors",
+      "zh": "地域总监",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "Regional Directors Association",
+      "zh": "地域总监联合会",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Regional Representatives",
+      "zh": "地域代表",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Regional Sites",
+      "zh": "地域站点",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "respective Regional Commands.",
+      "zh": "所在地域的指挥部",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Revisions",
+      "zh": "历史更迭",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites"
+      ]
+    },
+    {
+      "en": "Sapient Hazard",
+      "zh": "智能危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "SCHOLAR",
+      "zh": "学者",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Sentient Hazard",
+      "zh": "感知危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Site Roles",
+      "zh": "设施职务",
+      "variants": [],
+      "sources": [
+        "site-index"
+      ]
+    },
+    {
+      "en": "SOUTHCOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Southern Command",
+      "zh": "南方指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "Special Representatives",
+      "zh": "特别代表",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Table of Contents",
+      "zh": "目 录",
+      "variants": [],
+      "sources": [
+        "governments-of-interest"
+      ]
+    },
+    {
+      "en": "Teleportation Hazard",
+      "zh": "传送危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Temporal Hazard",
+      "zh": "时序危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Terms",
+      "zh": "任期表",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "The '79 Rebellion (1978-1979)",
+      "zh": "79叛乱（1978-1979）",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "The Anomaly Boom",
+      "zh": "异常大爆炸",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "The Great Breach (1979-1985)",
+      "zh": "大突破（1979-1985）",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "The RCPA Reality",
+      "zh": "RCPA现实",
+      "variants": [],
+      "sources": [
+        "alternate-realities"
+      ]
+    },
+    {
+      "en": "The Remnants Timeline",
+      "zh": "残部时间线",
+      "variants": [],
+      "sources": [
+        "alternate-realities"
+      ]
+    },
+    {
+      "en": "Top Level Administration",
+      "zh": "高级管理层人员",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Toxic Hazard",
+      "zh": "毒性危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Transmutation Hazard",
+      "zh": "变形危害",
+      "variants": [],
+      "sources": [
+        "threats-hazards"
+      ]
+    },
+    {
+      "en": "Update 3/28/21",
+      "zh": "2021年3月28日更新",
+      "variants": [],
+      "sources": [
+        "authority-departmental-hierarchy"
+      ]
+    },
+    {
+      "en": "Utility (UT)",
+      "zh": "实用化（UT）",
+      "variants": [],
+      "sources": [
+        "object-classes"
+      ]
+    },
+    {
+      "en": "Viderics",
+      "zh": "真视素",
+      "variants": [],
+      "sources": [
+        "terminology-index"
+      ]
+    },
+    {
+      "en": "WESTCOM",
+      "zh": "[正在收集数据]",
+      "variants": [],
+      "sources": [
+        "directorate"
+      ]
+    },
+    {
+      "en": "Western Command",
+      "zh": "西方指挥部",
+      "variants": [],
+      "sources": [
+        "authority-regional-sites",
+        "operational-districts"
+      ]
+    },
+    {
+      "en": "whom",
+      "zh": "何人",
+      "variants": [],
+      "sources": [
+        "operational-districts"
+      ]
+    }
+  ]
+}

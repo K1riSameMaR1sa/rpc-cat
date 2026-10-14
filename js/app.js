@@ -6,6 +6,7 @@ import * as db from './db.js';
 import { parseTmx, buildTmx, toPairs } from './tmx.js';
 import { MemoryIndex } from './match.js';
 import { loadConfig, openMasterGate, readMaybeGzip, masterAvailable } from './master.js';
+import { loadGlossary } from './glossary.js';
 import {
   h, mount, toast, modal, confirmDialog, downloadText, pickFile, readText,
   fmtNum, fmtBytes,
@@ -32,8 +33,9 @@ export const state = {
   index: null,          // MemoryIndex for the active memory
   indexBuilding: false,
   view: 'workbench',
-  config: null,         // data/config.json (licence text, admin hash, master info)
+  content: null,        // data/config.json (licence text, master-memory info)
   session: null,        // master memory held in memory only, never written
+  glossary: null,       // term base (js/glossary.js)
 };
 
 export const SESSION_ID = '__session__';
@@ -445,7 +447,7 @@ async function firstRunCheck() {
         h('li', '在「对齐制作」里粘贴中英原文，自动生成 TMX'),
         hasMaster
           ? h('li', `载入内置的${cfg.master && cfg.master.name ? cfg.master.name : '总记忆库'}`
-              + `（${fmtNum((cfg.master && cfg.master.units) || 0)} 条，需要管理员口令）`)
+              + `（${fmtNum((cfg.master && cfg.master.units) || 0)} 条）`)
           : null,
         demoAvailable ? h('li', '载入内置示例记忆库（660 条，无需口令）') : null),
       h('p.tiny', '全部数据只保存在你自己的浏览器里，不会上传到任何服务器。'),
@@ -520,6 +522,11 @@ export async function main() {
   // config first: the first-run dialog needs to know whether a master memory
   // exists and what the licence text says
   state.config = await loadConfig();
+  // the term base is small (a few tens of KB); load it once at startup
+  state.glossary = await loadGlossary();
+  if (state.glossary) {
+    console.info(`[rpc-cat] 术语库已载入：${state.glossary.size} 条`);
+  }
 
   await refreshMemories();
   renderView();

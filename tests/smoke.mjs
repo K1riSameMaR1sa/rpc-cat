@@ -44,6 +44,8 @@ const seg = await tryImport('segment.js', '../js/segment.js');
 const align = await tryImport('align.js', '../js/align.js');
 const match = await tryImport('match.js', '../js/match.js');
 const dbmod = await tryImport('db.js', '../js/db.js');
+const glossary = await tryImport('glossary.js', '../js/glossary.js');
+const docmod = await tryImport('document.js', '../js/document.js');
 const workbench = await tryImport('views/workbench.js', '../js/views/workbench.js');
 const alignView = await tryImport('views/align.js', '../js/views/align.js');
 const memoryView = await tryImport('views/memory.js', '../js/views/memory.js');
@@ -60,6 +62,8 @@ for (const [mod, names, label] of [
   [align, ['buildTUs', 'alignBlocks', 'makeBlocks'], 'align'],
   [match, ['MemoryIndex', 'normalize', 'editSimilarity'], 'match'],
   [dbmod, ['openDb', 'listMemories', 'addUnits', 'getUnits', 'saveDocument'], 'db'],
+  [glossary, ['loadGlossary', 'Glossary', 'getGlossary'], 'glossary'],
+  [docmod, ['parseDocument', 'reconstruct', 'documentStats', 'collectPairs', 'flattenSentences'], 'document'],
   [workbench, ['render', 'openProject'], 'workbench'],
   [alignView, ['render', 'collectPairs'], 'align view'],
   [memoryView, ['render'], 'memory view'],
@@ -92,6 +96,12 @@ const ctx = {
     ]),
     indexBuilding: false,
     view: 'workbench',
+    config: { gate: { requireConsent: true, consentPoints: [] }, master: null },
+    session: null,
+    glossary: new glossary.Glossary([
+      { en: 'Authority', zh: '管理局', source: 'memory', count: 1224, consistency: 0.91 },
+      { en: 'Containment Protocols', zh: '收容协议', source: 'both', count: 168, consistency: 0.85 },
+    ]),
   },
   refreshMemories: async () => {},
   loadActiveIndex: async () => {},

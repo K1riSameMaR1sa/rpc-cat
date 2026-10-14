@@ -6,13 +6,10 @@
       "总记忆库的语料来自 RPC Authority 英文主站（rpc-wiki.net）与 RPC 管理局中文分站（rpc-wiki-cn.wikidot.com），采用 CC BY-SA 3.0 授权。",
       "我会在使用与再分发（包括基于它产出的译文）时保留署名，并以相同方式共享。",
       "我理解这是我本机浏览器中的一份副本；清除浏览器数据会一并删除。",
-      "我理解自动对齐可能存在错配，重要内容需要人工复核。"
+      "我理解自动对齐与自动挖词都可能存在错配，重要内容需要人工复核。"
     ],
-    "notice": "本工具为纯前端页面，管理员口令只是流程护栏，并非服务端鉴权。"
+    "notice": "本工具是纯前端页面，没有服务器，因此不设口令，也不做访问控制。"
   },
-  "adminCodeHash": "d57341406ad536aec37b00546d490f3065d542c2ac106c2e7a0f8e38491d6780",
-  "adminCodeIsDefault": true,
-  "adminHint": "默认口令为 rpc-admin。请运行 npm run set-code -- <新口令> 更换，再重新构建。",
   "master": {
     "file": "data/rpc-memory.tmx.gz",
     "name": "RPC Authority 中英总记忆库",
@@ -24,6 +21,15 @@
     "attribution": "RPC Authority Wiki (rpc-wiki.net) 与 RPC 管理局中文分站 (rpc-wiki-cn.wikidot.com) 的贡献者",
     "rawBytes": 22482959,
     "builtFrom": "../rpc-tm/out/RPC_Authority_EN-ZH.tmx"
+  },
+  "glossary": {
+    "file": "data/glossary.tsv.gz",
+    "name": "RPC 管理局中英术语库",
+    "count": 1079,
+    "srcLang": "en-US",
+    "tgtLang": "zh-CN",
+    "license": "CC BY-SA 3.0 Unported",
+    "note": "由 data/glossary-curated.json（维基术语页）与总记忆库挖掘合并而成，可用 npm run make-glossary 重新生成。"
   },
   "demo": {
     "file": "data/demo-tm.tmx",

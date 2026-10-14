@@ -12,7 +12,7 @@
  *   node scripts/bundle.mjs
  */
 
-import { readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs';
 import { dirname, join, resolve, relative, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -182,6 +182,12 @@ const css = readFileSync(join(ROOT, 'css', 'style.css'), 'utf8');
 const demo = readFileSync(join(ROOT, 'data', 'demo-tm.tmx'), 'utf8');
 const config = readFileSync(join(ROOT, 'data', 'config.json'), 'utf8');
 
+// The term base is small; always inline it so it works from file:// too.
+const glossaryPath = join(ROOT, 'data', 'glossary.tsv.gz');
+const glossaryB64 = existsSync(glossaryPath)
+  ? readFileSync(glossaryPath).toString('base64')
+  : null;
+
 let masterB64 = null;
 if (withMaster) {
   const gz = readFileSync(join(ROOT, 'data', 'rpc-memory.tmx.gz'));
@@ -205,6 +211,7 @@ const demoScript = `<script>\n`
   + `// Embedded so the demo memory and the gate config work from file:// too.\n`
   + `window.__RPC_CAT_CONFIG = ${config.trim()};\n`
   + `window.__RPC_CAT_DEMO_TMX = ${JSON.stringify(demo)};\n`
+  + (glossaryB64 ? `window.__RPC_CAT_GLOSSARY_GZ = ${JSON.stringify(glossaryB64)};\n` : '')
   + (masterB64 ? `window.__RPC_CAT_MASTER_GZ = ${JSON.stringify(masterB64)};\n` : '')
   + `</script>\n`;
 
@@ -232,5 +239,6 @@ console.log(`modules bundled : ${modules.size}`);
 console.log(`bundle size     : ${kb(Buffer.byteLength(bundle))}`);
 console.log(`demo memory     : ${kb(Buffer.byteLength(demo))}`);
 console.log(`config          : ${kb(Buffer.byteLength(config))}`);
+console.log(`glossary        : ${glossaryB64 ? kb(glossaryB64.length) + ' (embedded)' : 'not present'}`);
 console.log(`master memory   : ${masterB64 ? kb(masterB64.length) + ' (embedded, base64)' : 'not embedded (fetched at runtime)'}`);
 console.log(`wrote           : ${relative(ROOT, OUT)} (${(Buffer.byteLength(html) / 1024 / 1024).toFixed(2)} MB)`);

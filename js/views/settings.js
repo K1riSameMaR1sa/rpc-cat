@@ -20,6 +20,11 @@ export function render(ctx) {
   ));
 
   wrap.append(h('div.card',
+    h('h2', { style: { marginTop: 0 } }, '术语库'),
+    renderGlossaryCard(ctx),
+  ));
+
+  wrap.append(h('div.card',
     h('h2', { style: { marginTop: 0 } }, '导入 / 导出'),
     h('div.row',
       h('button.btn.primary', {
@@ -115,6 +120,58 @@ export function render(ctx) {
   return wrap;
 }
 
+function renderGlossaryCard(ctx) {
+  const g = ctx.state.glossary;
+  if (!g) {
+    return h('div',
+      h('p.dim', '没有载入术语库。'),
+      h('p.tiny', '维护者可以用 npm run make-glossary 从记忆库与维基术语页生成 data/glossary.tsv.gz。'));
+  }
+  const s = g.stats();
+  const results = h('div', { style: { marginTop: '10px' } });
+  const input = h('input', {
+    type: 'search', placeholder: '检索术语（中英皆可）…', style: { maxWidth: '340px' },
+  });
+  const run = () => {
+    const q = input.value.trim();
+    if (!q) { mount(results); return; }
+    const hits = g.search(q, { limit: 60 });
+    if (!hits.length) { mount(results, h('div.tiny.mute', '没有匹配的术语')); return; }
+    mount(results, h('div.scroll-y', { style: { maxHeight: '340px' } }, h('table.data',
+      h('thead', h('tr',
+        h('th', 'English'), h('th', '中文'), h('th', { style: { width: '90px' } }, '来源'),
+        h('th', { style: { width: '80px' } }, '出现'), h('th', { style: { width: '80px' } }, '一致度'))),
+      h('tbody', ...hits.map((t) => h('tr',
+        h('td', t.en), h('td', t.zh),
+        h('td.tiny.mute', t.source === 'wiki' ? '维基' : (t.source === 'both' ? '两者' : '挖掘')),
+        h('td.tiny.mute', String(t.count)),
+        h('td.tiny.mute', String(t.consistency))))))));
+  };
+  input.addEventListener('input', run);
+
+  return h('div',
+    h('div.stat-grid', { style: { marginBottom: '12px' } },
+      h('div.stat', h('div.v', fmtNum(s.total)), h('div.k', '术语条目')),
+      h('div.stat', h('div.v', fmtNum(s.bySource.wiki || 0)), h('div.k', '维基术语表')),
+      h('div.stat', h('div.v', fmtNum(s.bySource.memory || 0)), h('div.k', '记忆库挖掘')),
+      h('div.stat', h('div.v', String(s.avgConsistency)), h('div.k', '平均一致度'))),
+    h('p.dim', '术语来自两处：维基术语索引页里中英对应的小标题，以及从翻译记忆中挖掘'
+      + '（同一个英文词在多数译文里都用同一个中文说法）。'
+      + '在工作台里，每句话下方会列出该句出现的术语，点一下即可插入。'),
+    h('div.row', input,
+      h('button.btn', {
+        onclick: () => {
+          downloadText('rpc-cat-glossary.tsv', g.toTsv(), 'text/tab-separated-values;charset=utf-8');
+          toast('已导出术语表（TSV，可用表格软件审校）', 'ok');
+        },
+      }, '导出术语表')),
+    results,
+    h('p.tiny', { style: { marginTop: '10px' } },
+      '术语是自动挖掘的，一致度低于 1 的条目建议人工复核。'
+      + '导出的 TSV 可以直接编辑后放回 data/ 重新生成。'),
+  );
+}
+
 function renderMasterCard(ctx) {
   const cfg = ctx.state.config;
   const m = cfg && cfg.master;
@@ -149,13 +206,8 @@ function renderMasterCard(ctx) {
         ? h('span.pill.ok', '本机已写入')
         : h('span.tiny.mute', '需确认授权条款')),
     h('p.tiny', { style: { marginTop: '10px' } },
-      '载入本身不需要口令：选「只本次使用，不写入」就能把它放进内存供本次查证，'
-      + '关掉页面即消失。只有「写入本机记忆库」（长期保留、翻译时自动匹配）'
-      + '才需要向管理员索取口令。'),
-    cfg.adminCodeIsDefault
-      ? h('p.tiny', { style: { color: 'var(--warn)', marginTop: '8px' } },
-          '⚠ 站点仍在使用默认管理员口令，维护者请运行 npm run set-code -- <新口令> 更换。')
-      : null,
+      '载入本身不需要任何口令或授权之外的确认：选「只本次使用，不写入」就能把它放进内存供本次查证，'
+      + '关掉页面即消失；选「写入本机记忆库」则会长期保留、翻译时自动匹配。'),
   );
 }
 

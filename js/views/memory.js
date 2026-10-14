@@ -57,6 +57,7 @@ export function render(ctx) {
 
 function renderToolbar(ctx) {
   const mem = ctx.state.activeMemory;
+  const isSession = !!mem.session;
   const input = h('input', {
     type: 'search',
     placeholder: '检索源文或译文…（支持正则，格式 /pattern/）',
@@ -66,19 +67,38 @@ function renderToolbar(ctx) {
   const run = debounce(() => { st.query = input.value; st.offset = 0; refreshRows(ctx); }, 260);
   input.addEventListener('input', run);
 
+  const actions = isSession
+    ? [
+        h('button.btn', { onclick: () => { ctx.clearSessionMemory(); ctx.refresh(); } },
+          '清除临时记忆库'),
+        h('button.btn', { onclick: () => ctx.setView('settings') }, '去设置里写入'),
+      ]
+    : [
+        h('button.btn', { onclick: () => createMemory(ctx) }, '新建'),
+        h('button.btn', { onclick: () => renameMemory(ctx) }, '重命名'),
+        h('button.btn', { onclick: () => addUnitDialog(ctx) }, '+ 添加'),
+        h('button.btn', { onclick: () => exportDialog(ctx) }, '导出'),
+        h('button.btn', { onclick: () => toolsDialog(ctx) }, '工具'),
+        h('button.btn.danger', { onclick: () => deleteMemory(ctx) }, '删除'),
+      ];
+
   return h('div.card',
     h('div.row',
       h('div', h('strong', mem ? mem.name : ''),
-        h('div.tiny', mem ? `${mem.srcLang} → ${mem.tgtLang}${mem.note ? ' · ' + mem.note : ''}` : '')),
+        h('div.tiny', mem
+          ? `${mem.srcLang} → ${mem.tgtLang}${mem.session
+              ? ' · 只存在于内存中，关闭页面即消失'
+              : (mem.note ? ' · ' + mem.note : '')}`
+          : '')),
       h('span.grow'),
       input,
-      h('button.btn', { onclick: () => createMemory(ctx) }, '新建'),
-      h('button.btn', { onclick: () => renameMemory(ctx) }, '重命名'),
-      h('button.btn', { onclick: () => addUnitDialog(ctx) }, '+ 添加'),
-      h('button.btn', { onclick: () => exportDialog(ctx) }, '导出'),
-      h('button.btn', { onclick: () => toolsDialog(ctx) }, '工具'),
-      h('button.btn.danger', { onclick: () => deleteMemory(ctx) }, '删除'),
+      ...actions,
     ),
+    isSession
+      ? h('p.tiny.mute', { style: { marginTop: '8px' } },
+          '临时记忆库不能修改——它没有写进数据库。若想长期保留，'
+          + '到「设置 → 总记忆库」改选「写入本机记忆库」。')
+      : null,
   );
 }
 
@@ -105,6 +125,8 @@ async function refreshRows(ctx) {
   if (!mem) return;
   mount(bodyEl, h('div.loading', '读取中'));
 
+  const isSession = !!mem.session;
+
   try {
     if (st.query.trim()) {
       const q = st.query.trim();
@@ -124,6 +146,14 @@ async function refreshRows(ctx) {
         st.total = 0;
       }
       st.searching = true;
+    } else if (isSession) {
+      // A session memory exists only in the page — there is nothing in
+      // IndexedDB to page through, so browse the in-memory units directly.
+      const all = ctx.state.session.units;
+      st.rows = all.slice(st.offset, st.offset + PAGE)
+        .map((u, i) => ({ id: `s${st.offset + i}`, src: u.src, tgt: u.tgt, doc: u.doc }));
+      st.total = all.length;
+      st.searching = false;
     } else {
       st.rows = await db.getUnits(mem.id, { offset: st.offset, limit: PAGE });
       st.total = mem.count;
@@ -164,18 +194,24 @@ function renderTable(ctx) {
   ));
 
   const tbody = h('tbody');
+  const isSession = !!ctx.state.activeMemory.session;
   for (const r of rows) {
     tbody.append(h('tr',
       h('td', h('input', {
         type: 'checkbox', checked: st.selected.has(r.id), style: { width: 'auto' },
+        disabled: isSession,
         onchange: (e) => {
           if (e.target.checked) st.selected.add(r.id); else st.selected.delete(r.id);
           updateBulkBar(ctx);
         },
       })),
       h('td', h('div.row.tight',
-        h('button.btn.sm', { onclick: () => editUnit(ctx, r) }, '改'),
-        h('button.btn.sm.danger', { onclick: () => removeUnit(ctx, r) }, '删'),
+        isSession
+          ? h('span.tiny.mute', '只读')
+          : h('button.btn.sm', { onclick: () => editUnit(ctx, r) }, '改'),
+        isSession
+          ? null
+          : h('button.btn.sm.danger', { onclick: () => removeUnit(ctx, r) }, '删'),
       )),
       h('td', r.src),
       h('td', r.tgt),
@@ -207,6 +243,8 @@ function renderTable(ctx) {
 function updateBulkBar(ctx) {
   const bar = document.getElementById('bulkBar');
   if (!bar) return;
+  const isSession = !!ctx.state.activeMemory.session;
+  if (isSession) { mount(bar); return; }
   const n = st.selected.size;
   mount(bar,
     h('span.tiny.dim', n ? `已选 ${fmtNum(n)} 条` : '勾选后可批量操作'),

@@ -274,6 +274,7 @@ function renderTextBlock(ctx, block, bi, textParts, claimRange) {
 
 function renderSentence(ctx, sentence, idx, bi) {
   const matches = ctx.state.index ? safeSearch(ctx.state.index, sentence.src) : [];
+  const terms = ctx.state.glossary ? safeTerms(ctx.state.glossary, sentence.src) : [];
   const missing = sentence.tgt.trim()
     ? placeholderDiff(placeholderSignature(sentence.src), placeholderSignature(sentence.tgt))
     : [];
@@ -285,6 +286,7 @@ function renderSentence(ctx, sentence, idx, bi) {
     h('span.sent-idx.mono', `${idx + 1}`),
     missing.length ? h('span.pill.new', `缺少 ${missing.join(' ')}`) : null,
     h('span.grow'),
+    terms.length ? h('span.tiny.mute', `${terms.length} 个术语`) : null,
     h('span.tiny.mute', { dataset: { role: 'matchcount' } },
       matches.length ? `${matches.length} 条匹配` : '无匹配'),
   ));
@@ -297,6 +299,31 @@ function renderSentence(ctx, sentence, idx, bi) {
     value: sentence.tgt,
     dataset: { flat: String(idx) },
   });
+
+  // terms in THIS sentence: click one to insert its translation at the cursor
+  if (terms.length) {
+    const box = h('div.term-row', { title: '本句出现的术语（点击插入译文）' });
+    for (const t of terms) {
+      const chip = h('button.term-chip', {
+        title: `${t.source === 'memory' ? '记忆库挖掘' : '维基术语表'} · 出现 ${t.count} 次 · 一致度 ${t.consistency}`,
+      },
+        h('span.term-en', t.en),
+        h('span.term-arrow', '→'),
+        h('span.term-zh', t.zh),
+      );
+      chip.addEventListener('click', () => {
+        insertAtCursor(ta, t.zh);
+        sentence.tgt = ta.value;
+        row.classList.add('done');
+        renderStats();
+        updateBlockState(bi);
+        ta.focus();
+      });
+      box.append(chip);
+    }
+    row.append(box);
+  }
+
   ta.addEventListener('input', () => {
     sentence.tgt = ta.value;
     row.classList.toggle('done', !!sentence.tgt.trim());
@@ -335,6 +362,20 @@ function renderSentence(ctx, sentence, idx, bi) {
     row.append(box);
   }
   return row;
+}
+
+/** Insert text into a textarea at the caret, replacing any selection. */
+function insertAtCursor(ta, text) {
+  const start = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+  const end = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const pos = start + text.length;
+  try { ta.setSelectionRange(pos, pos); } catch { /* shim */ }
+}
+
+function safeTerms(glossary, src) {
+  try { return glossary.lookup(src, { limit: 8 }); }
+  catch (err) { console.error(err); return []; }
 }
 
 function updateBlockState(bi) {

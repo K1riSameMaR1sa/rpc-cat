@@ -259,6 +259,24 @@ table.data tr:hover td { background: var(--surface-2); }
 .sent-idx { font-size: 10.5px; color: var(--text-mute); min-width: 22px; }
 .sentence textarea { margin-top: 5px; min-height: 34px; }
 
+/* ------------------------------------------------------------- term chips */
+
+.term-row {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;
+}
+.term-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  background: var(--surface-3); border: 1px solid var(--line-2);
+  border-radius: 99px; padding: 2px 9px;
+  font-size: 11.5px; cursor: pointer; color: var(--text-dim);
+  transition: border-color .12s, background .12s, color .12s;
+  max-width: 100%;
+}
+.term-chip:hover { border-color: var(--accent); color: var(--text); background: #2a2a33; }
+.term-en { font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.term-arrow { color: var(--text-mute); }
+.term-zh { color: var(--hi); white-space: nowrap; }
+
 /* ---------------------------------------------------------------- align */
 
 .align-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
