@@ -100,6 +100,27 @@ ok('demo memory embedded', html.includes('__RPC_CAT_DEMO_TMX'));
 ok('gate config embedded', html.includes('__RPC_CAT_CONFIG'));
 ok('term base embedded', html.includes('__RPC_CAT_GLOSSARY_GZ'));
 
+// The brand mark is an INVERTED triangle (apex at the bottom). Check the
+// geometry rather than the exact coordinates, so nudging the numbers is fine
+// but flipping the direction is not.
+{
+  const brand = html.match(/<path d="M(\d+) (\d+) L(\d+) (\d+) H(\d+) Z"[^>]*stroke="currentColor"/);
+  ok('brand mark path found', !!brand, 'no <path stroke="currentColor"> in the bundle');
+  if (brand) {
+    const apexY = Number(brand[2]);
+    const baseY = Number(brand[4]);
+    ok('brand triangle points DOWN (inverted)', apexY > baseY,
+      `apex y=${apexY}, base y=${baseY} — apex must be below the base`);
+    ok('brand mark keeps its circle', /<circle cx="\d+" cy="\d+" r="3"/.test(html));
+  }
+  const fav = html.match(/path d='M(\d+) (\d+) L(\d+) (\d+) H(\d+) Z'/);
+  ok('favicon triangle found', !!fav);
+  if (fav) {
+    ok('favicon triangle is inverted too', Number(fav[2]) > Number(fav[4]),
+      `apex y=${fav[2]}, base y=${fav[4]}`);
+  }
+}
+
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
 eq('two inline scripts (data + app)', scripts.length, 2);
 
