@@ -377,6 +377,11 @@ section('AI 翻译：DeepSeek 接入（打桩，不产生费用）');
   ok('there is an API key field', !!keyInput);
   ok('there is a temperature control', !!tempInput);
   ok('there is a model selector', findAll(view(), (n) => n.tagName === 'SELECT').length >= 1);
+  // labels must be block-level, otherwise an inline label sits beside the input
+  // and overlaps it
+  ok('config labels use the block field-label class',
+    findAll(view(), (n) => String(n.className).includes('field-label')).length >= 4,
+    `found ${findAll(view(), (n) => String(n.className).includes('field-label')).length}`);
 
   // the temperature field must explain itself — a bare number box is useless
   // to anyone who has not met the concept before

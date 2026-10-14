@@ -51,11 +51,17 @@ npm run serve          # 然后打开 http://localhost:8080/
 
 ```bash
 npm run build          # 重新生成 rpc-cat.html
-npm test               # 四组测试
+npm test               # 八组测试
 ```
 
 `rpc-cat.html` 是**构建产物，但建议一起提交**，这样别人 clone 下来就能直接双击用。
 它由 `js/` 下的 ES 模块生成——那些才是唯一的事实来源，别直接改 `rpc-cat.html`。
+
+> **部署后测试新版本，请强制刷新（Ctrl+Shift+R）。**
+> GitHub Pages 给模块设的响应头是 `Cache-Control: max-age=600`，
+> 浏览器可能**继续用最多 10 分钟的旧代码**——
+> 你会以为改好的功能「没生效」，其实线上早就是新的了。
+> 单文件版 `rpc-cat.html` 同理。
 
 ---
 
