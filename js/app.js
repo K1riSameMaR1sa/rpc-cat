@@ -263,7 +263,7 @@ export async function importTmxFile(file) {
 /**
  * Import pairs, either into a new memory or appended to an existing one.
  */
-export async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
+export async function doImport(pairs, { defaultName, srcLang, tgtLang, autoConfirm = false }) {
   let mode = 'new';
 
   const newNameInput = h('input', { type: 'text', value: defaultName, placeholder: '记忆库名称' });
@@ -290,7 +290,7 @@ export async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
     h('p.tiny', '导入后可用「记忆库」页导出为 TMX、CSV 或 JSON。'),
   );
 
-  const ok = await new Promise((resolve) => {
+  const ok = autoConfirm || await new Promise((resolve) => {
     modal({
       title: '导入翻译记忆',
       body,
@@ -307,7 +307,15 @@ export async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
   if (!ok) return;
 
   let memoryId;
-  if (mode === 'new') {
+  if (autoConfirm) {
+    // called from the master-memory gate, which already collected consent,
+    // the administrator code and the write/no-write choice — asking again
+    // would be pure friction
+    memoryId = await db.createMemory({
+      name: defaultName, srcLang, tgtLang,
+      note: '总记忆库（已授权载入）',
+    });
+  } else if (mode === 'new') {
     memoryId = await db.createMemory({
       name: newNameInput.value.trim() || defaultName,
       srcLang, tgtLang,
@@ -533,9 +541,9 @@ function showHelp() {
         + '未翻译的句子会保留原文，不会丢内容。'),
       h('h3', '总记忆库'),
       h('p.dim', '「设置 → 总记忆库」可载入完整的 29,271 条中英记忆库。'
-        + '需要勾选授权条款并输入管理员口令，口令向站点管理员索取。'
-        + '可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
-        + '（仅放在内存里查证，关掉页面即消失）。'),
+        + '需要勾选授权条款；口令只在写入时才需要。'
+        + '「只本次使用，不写入」把它放进内存供本次查证，关掉页面即消失，无需口令；'
+        + '「写入本机记忆库」长期保留、翻译时自动匹配，需要向站点管理员索取口令。'),
       h('h3', '工作台'),
       h('p.dim', '逐句翻译，每句自动从当前记忆库检索匹配（100% 精确 + 模糊百分比），'
         + '点一下即填入。译文漏掉原文编号时会就地提示。'

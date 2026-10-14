@@ -1819,7 +1819,13 @@ function radioRow(name, value, label, hint, checked, onPick) {
 }
 
 /**
- * Ask for licence consent and the administrator code, then load the memory.
+ * Ask for licence consent, and for the administrator code only when the memory
+ * is actually going to be WRITTEN into the local database.
+ *
+ * Reading is free: holding the memory in the page for this session costs
+ * nothing and commits nothing, so it needs no permission. Persisting a copy is
+ * the privileged action, and that is what the code gates.
+ *
  * @param {Object} ctx        view context ({ state, importPairs, loadSessionMemory })
  * @param {Object} [opts]     { file } to read a local file instead of fetching
  */
@@ -1828,13 +1834,40 @@ async function openMasterGate(ctx, opts = {}) {
   const m = config.master;
   if (!m) { toast('这个版本没有内置总记忆库', 'err'); return; }
 
-  let choice = opts.write === false ? 'temp' : 'write';
+  // default to the friction-free path, so the dialog can be completed by
+  // someone who has no code at all
+  let choice = opts.write === true ? 'write' : 'temp';
   const consentBox = h('input', { type: 'checkbox', style: { width: 'auto' } });
   const codeInput = h('input', {
     type: 'password', autocomplete: 'off',
     placeholder: '管理员口令', style: { maxWidth: '280px' },
   });
   const fileNote = h('div.tiny.mute');
+
+  const codeBlock = h('div',
+    h('h3', '管理员口令'),
+    h('div.row', codeInput,
+      h('button.btn.sm', {
+        onclick: async () => {
+          const f = await pickFile({ accept: '.gz,.tmx,.xml' });
+          if (!f) return;
+          opts.file = f;
+          fileNote.textContent = `已选择本地文件：${f.name}（${fmtBytes(f.size)}）`;
+        },
+      }, '或选择本地文件')),
+    h('p.tiny.mute', { style: { marginTop: '8px' } },
+      config.adminCodeIsDefault
+        ? '⚠ 站点仍在用默认口令，管理员应尽快更换。'
+        : (config.adminHint || '口令由站点管理员分发。')),
+  );
+
+  const sync = () => {
+    codeBlock.hidden = choice !== 'write';
+    modeHint.textContent = choice === 'write'
+      ? '写入后长期保留，不必每次重新载入。需要管理员口令。'
+      : '无需口令。只放在内存里供本次查证，关掉页面即消失。';
+  };
+  const modeHint = h('p.tiny.mute');
 
   const points = (config.gate && config.gate.consentPoints) || [];
   const body = h('div',
@@ -1844,41 +1877,29 @@ async function openMasterGate(ctx, opts = {}) {
       h('div.stat', h('div.v', `${m.srcLang} → ${m.tgtLang}`), h('div.k', '语言对')),
       h('div.stat', h('div.v', 'CC BY-SA 3.0'), h('div.k', '授权'))),
 
-    h('h3', { style: { marginTop: 0 } }, (config.gate && config.gate.consentTitle) || '授权确认'),
+    h('h3', { style: { marginTop: 0 } }, '使用方式'),
+    radioRow('masterMode', 'temp', '只本次使用，不写入', null,
+      choice === 'temp', (v) => { choice = v; sync(); }),
+    radioRow('masterMode', 'write', '写入本机记忆库', null,
+      choice === 'write', (v) => { choice = v; sync(); }),
+    modeHint,
+
+    h('h3', '授权确认'),
     points.length
       ? h('ul', { style: { paddingLeft: '20px', color: 'var(--text-dim)', fontSize: '13px' } },
           ...points.map((p) => h('li', p)))
       : null,
     h('p.tiny.mute', { style: { marginTop: '8px' } }, m.attribution || ''),
-
-    h('h3', '我要怎么用它'),
-    radioRow('masterMode', 'write', '写入本机记忆库', '写入后长期保留，翻译时自动匹配',
-      choice === 'write', (v) => { choice = v; }),
-    radioRow('masterMode', 'temp', '只本次使用，不写入', '只放在内存里供本次查证，关闭页面即消失',
-      choice === 'temp', (v) => { choice = v; }),
-
-    h('h3', '授权与口令'),
-    h('label.row', { style: { alignItems: 'flex-start', marginBottom: '10px' } },
+    h('label.row', { style: { alignItems: 'flex-start', margin: '10px 0 4px' } },
       consentBox,
-      h('span', '我已阅读并同意上述授权条款',
+      h('span', (config.gate && config.gate.consentTitle) || '我已阅读并同意上述授权条款',
         h('div.tiny.mute', '未勾选则无法载入'))),
-    h('div.row', codeInput,
-      h('button.btn.sm', {
-        onclick: async () => {
-          const f = await pickFile({ accept: '.gz,.tmx,.xml' });
-          if (!f) return;
-          opts.file = f;
-          fileNote.textContent = `已选择本地文件：${f.name}（${fmtBytes(f.size)}）`;
-        },
-      }, '或选择本地文件'),
-    ),
-    h('p.tiny.mute', { style: { marginTop: '8px' } },
-      config.adminCodeIsDefault
-        ? '⚠ 站点仍在用默认口令，管理员应尽快更换。'
-        : (config.adminHint || '口令由站点管理员分发。')),
+
+    codeBlock,
     config.gate && config.gate.notice ? h('p.tiny.mute', config.gate.notice) : null,
     fileNote,
   );
+  sync();
 
   return new Promise((resolve) => {
     modal({
@@ -1888,32 +1909,34 @@ async function openMasterGate(ctx, opts = {}) {
       actions: [
         { label: '取消', onClick: (close) => { close(); resolve(false); } },
         {
-          label: '验证并载入',
+          label: '载入',
           primary: true,
           onClick: async (close) => {
             if (config.gate && config.gate.requireConsent && !consentBox.checked) {
               toast('请先勾选授权条款', 'err');
               return;
             }
-            const code = codeInput.value;
-            if (!code.trim()) { toast('请输入管理员口令', 'err'); return; }
 
-            let hash = '';
-            try { hash = await sha256Hex(code); }
-            catch (err) { toast(err.message, 'err'); return; }
-
-            if (!config.adminCodeHash) {
-              toast('配置里没有设置管理员口令，请先运行 npm run set-code', 'err');
-              return;
-            }
-            if (hash !== String(config.adminCodeHash).toLowerCase()) {
-              toast('口令不正确', 'err');
-              return;
+            const write = choice === 'write';
+            if (write) {
+              const code = codeInput.value;
+              if (!code.trim()) { toast('写入本机记忆库需要管理员口令', 'err'); return; }
+              if (!config.adminCodeHash) {
+                toast('配置里没有设置管理员口令，请先运行 npm run set-code', 'err');
+                return;
+              }
+              let hash = '';
+              try { hash = await sha256Hex(code); }
+              catch (err) { toast(err.message, 'err'); return; }
+              if (hash !== String(config.adminCodeHash).toLowerCase()) {
+                toast('口令不正确', 'err');
+                return;
+              }
             }
 
             close();
             resolve(true);
-            await applyMaster(ctx, config, { file: opts.file, write: choice === 'write' });
+            await applyMaster(ctx, config, { file: opts.file, write });
           },
         },
       ],
@@ -1950,7 +1973,14 @@ async function applyMaster(ctx, config, { file = null, write = true } = {}) {
   };
 
   if (write) {
-    await ctx.importPairs(pairs, { defaultName: meta.name, srcLang: meta.srcLang, tgtLang: meta.tgtLang });
+    await ctx.importPairs(pairs, {
+      defaultName: meta.name,
+      srcLang: meta.srcLang,
+      tgtLang: meta.tgtLang,
+      // the gate already collected consent, the code and the write/no-write
+      // choice; a second import dialog would just be friction
+      autoConfirm: true,
+    });
   } else {
     await ctx.loadSessionMemory(pairs, meta);
   }
@@ -4451,10 +4481,11 @@ function renderMasterCard(ctx) {
         : null,
       alreadyWritten
         ? h('span.pill.ok', '本机已写入')
-        : h('span.tiny.mute', '需要管理员口令与授权确认')),
+        : h('span.tiny.mute', '需确认授权条款')),
     h('p.tiny', { style: { marginTop: '10px' } },
-      '载入时可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
-      + '（仅放在内存里供本次查证）。'),
+      '载入本身不需要口令：选「只本次使用，不写入」就能把它放进内存供本次查证，'
+      + '关掉页面即消失。只有「写入本机记忆库」（长期保留、翻译时自动匹配）'
+      + '才需要向管理员索取口令。'),
     cfg.adminCodeIsDefault
       ? h('p.tiny', { style: { color: 'var(--warn)', marginTop: '8px' } },
           '⚠ 站点仍在使用默认管理员口令，维护者请运行 npm run set-code -- <新口令> 更换。')
@@ -5327,7 +5358,7 @@ async function importTmxFile(file) {
 /**
  * Import pairs, either into a new memory or appended to an existing one.
  */
-async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
+async function doImport(pairs, { defaultName, srcLang, tgtLang, autoConfirm = false }) {
   let mode = 'new';
 
   const newNameInput = h('input', { type: 'text', value: defaultName, placeholder: '记忆库名称' });
@@ -5354,7 +5385,7 @@ async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
     h('p.tiny', '导入后可用「记忆库」页导出为 TMX、CSV 或 JSON。'),
   );
 
-  const ok = await new Promise((resolve) => {
+  const ok = autoConfirm || await new Promise((resolve) => {
     modal({
       title: '导入翻译记忆',
       body,
@@ -5371,7 +5402,15 @@ async function doImport(pairs, { defaultName, srcLang, tgtLang }) {
   if (!ok) return;
 
   let memoryId;
-  if (mode === 'new') {
+  if (autoConfirm) {
+    // called from the master-memory gate, which already collected consent,
+    // the administrator code and the write/no-write choice — asking again
+    // would be pure friction
+    memoryId = await db.createMemory({
+      name: defaultName, srcLang, tgtLang,
+      note: '总记忆库（已授权载入）',
+    });
+  } else if (mode === 'new') {
     memoryId = await db.createMemory({
       name: newNameInput.value.trim() || defaultName,
       srcLang, tgtLang,
@@ -5597,9 +5636,9 @@ function showHelp() {
         + '未翻译的句子会保留原文，不会丢内容。'),
       h('h3', '总记忆库'),
       h('p.dim', '「设置 → 总记忆库」可载入完整的 29,271 条中英记忆库。'
-        + '需要勾选授权条款并输入管理员口令，口令向站点管理员索取。'
-        + '可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
-        + '（仅放在内存里查证，关掉页面即消失）。'),
+        + '需要勾选授权条款；口令只在写入时才需要。'
+        + '「只本次使用，不写入」把它放进内存供本次查证，关掉页面即消失，无需口令；'
+        + '「写入本机记忆库」长期保留、翻译时自动匹配，需要向站点管理员索取口令。'),
       h('h3', '工作台'),
       h('p.dim', '逐句翻译，每句自动从当前记忆库检索匹配（100% 精确 + 模糊百分比），'
         + '点一下即填入。译文漏掉原文编号时会就地提示。'

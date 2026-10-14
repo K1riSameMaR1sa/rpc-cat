@@ -231,42 +231,56 @@ section('master memory gate');
 
     const consent = inputsIn(modalRoot()).find((i) => i.type === 'checkbox');
     const codeInput = inputsIn(modalRoot()).find((i) => i.type === 'password');
-    const confirm = byText(modalRoot(), '验证并载入');
+    const confirm = buttonsIn(modalRoot()).find((b) => textOf(b).trim() === '载入');
     ok('gate asks for licence consent', !!consent);
     ok('gate asks for the admin code', !!codeInput);
     ok('gate has a confirm button', !!confirm);
     ok('gate explains the licence', textOf(modalRoot()).includes('CC BY-SA'));
     ok('gate offers write vs no-write',
       textOf(modalRoot()).includes('写入本机记忆库') && textOf(modalRoot()).includes('不写入'));
+    ok('gate says the no-write path needs no code',
+      textOf(modalRoot()).includes('无需口令'));
 
     const modalOpen = () => modalRoot().childNodes.length > 0;
+    const radios = () => inputsIn(modalRoot()).filter((i) => i.type === 'radio');
 
     if (consent && codeInput && confirm) {
-      // 1) without consent it must refuse
-      codeInput.value = 'rpc-admin';
+      // 1) without consent it must refuse, even on the free path
       confirm.dispatch('click');
       await settle(20);
       ok('refuses to load without consent', modalOpen());
 
-      // 2) with consent but a wrong code it must refuse
+      // 2) READING IS FREE: consent + the no-write option, with NO code at all
       consent.checked = true;
-      codeInput.value = 'not-the-code';
-      confirm.dispatch('click');
-      await settle(30);
-      ok('refuses a wrong admin code', modalOpen());
-
-      // 3) consent + right code, "no write" mode
-      const tempRadio = inputsIn(modalRoot()).find((i) => i.type === 'radio' && i.value === 'temp');
+      const tempRadio = radios().find((r) => r.value === 'temp');
       ok('there is a no-write option', !!tempRadio);
       if (tempRadio) tempRadio.dispatch('change');
 
-      codeInput.value = 'rpc-admin';
+      const toWrite = radios().find((r) => r.value === 'write');
+      ok('there is a write option', !!toWrite);
+
+      // switching to write must demand the code; switching back must not
+      if (toWrite) toWrite.dispatch('change');
+      await settle(4);
       confirm.dispatch('click');
       await settle(20);
-      ok('gate closes with the right code', !modalOpen());
+      ok('write mode refuses an empty code', modalOpen());
+
+      codeInput.value = 'not-the-code';
+      confirm.dispatch('click');
+      await settle(30);
+      ok('write mode refuses a wrong code', modalOpen());
+
+      // now the free path: no code entered at all
+      codeInput.value = '';
+      if (tempRadio) tempRadio.dispatch('change');
+      await settle(4);
+      confirm.dispatch('click');
+      await settle(20);
+      ok('gate closes on the no-write path without any code', !modalOpen());
 
       const loaded = await waitFor(() => storageText().includes('临时'), 120000);
-      ok('session memory became active', loaded, storageText());
+      ok('session memory became active without a code', loaded, storageText());
       ok('session memory is labelled temporary', storageText().includes('临时'), storageText());
 
       // the decisive check: nothing was written to IndexedDB
@@ -278,6 +292,48 @@ section('master memory gate');
       ok('picker lists the temporary memory', options.some((t) => t.includes('未写入')),
         options.join(' | '));
     }
+  }
+}
+
+/* ------------------------------------------------- writing DOES need the code */
+
+section('master memory: write path requires the code');
+
+{
+  await goTo('settings');
+  const before = storageText();
+
+  byText(view(), '载入总记忆库').dispatch('click');
+  await settle(20);
+
+  const consent = inputsIn(modalRoot()).find((i) => i.type === 'checkbox');
+  const codeInput = inputsIn(modalRoot()).find((i) => i.type === 'password');
+  const confirm = byText(modalRoot(), '载入');
+  const writeRadio = inputsIn(modalRoot()).find((i) => i.type === 'radio' && i.value === 'write');
+
+  ok('gate reopened', !!consent && !!confirm);
+  if (consent && codeInput && confirm && writeRadio) {
+    consent.checked = true;
+    writeRadio.dispatch('change');
+    await settle(4);
+
+    // wrong code first
+    codeInput.value = 'definitely-wrong';
+    confirm.dispatch('click');
+    await settle(30);
+    ok('wrong code is rejected on the write path', modalRoot().childNodes.length > 0);
+    eq('nothing was written after a bad code', storageText(), before);
+
+    // then the real code
+    codeInput.value = 'rpc-admin';
+    confirm.dispatch('click');
+    await settle(20);
+    ok('gate closes with the right code', modalRoot().childNodes.length === 0);
+
+    const wrote = await waitFor(() => storageText().includes('2 个记忆库'), 180000);
+    ok('the memory was written to the database', wrote, storageText());
+    ok('written memory holds all 29,271 units',
+      /29,271/.test(storageText()) || /29271/.test(storageText()), storageText());
   }
 }
 

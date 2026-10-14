@@ -147,10 +147,11 @@ function renderMasterCard(ctx) {
         : null,
       alreadyWritten
         ? h('span.pill.ok', '本机已写入')
-        : h('span.tiny.mute', '需要管理员口令与授权确认')),
+        : h('span.tiny.mute', '需确认授权条款')),
     h('p.tiny', { style: { marginTop: '10px' } },
-      '载入时可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
-      + '（仅放在内存里供本次查证）。'),
+      '载入本身不需要口令：选「只本次使用，不写入」就能把它放进内存供本次查证，'
+      + '关掉页面即消失。只有「写入本机记忆库」（长期保留、翻译时自动匹配）'
+      + '才需要向管理员索取口令。'),
     cfg.adminCodeIsDefault
       ? h('p.tiny', { style: { color: 'var(--warn)', marginTop: '8px' } },
           '⚠ 站点仍在使用默认管理员口令，维护者请运行 npm run set-code -- <新口令> 更换。')
