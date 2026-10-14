@@ -43,6 +43,9 @@ let progressEl = null;
 
 /* ------------------------------------------------------------------ load */
 
+/** One-line reminder next to the temperature box. */
+const TEMP_HINT = '0 = 每次结果相同 · 1 = 措辞较自然 · 越高越容易偏离术语表（不确定就保持 1.0）';
+
 export async function loadAiSettings() {
   const saved = await db.getSetting('ai', null);
   if (saved && typeof saved === 'object') {
@@ -62,6 +65,67 @@ async function saveAiSettings() {
     key: st.key, model: st.model, baseUrl: st.baseUrl,
     temperature: st.temperature, extra: st.extra,
     useTerms: st.useTerms, useMemory: st.useMemory, useContext: st.useContext,
+  });
+}
+
+/**
+ * The long version of the temperature explanation. Kept in a dialog rather than
+ * inline: the field needs a one-line reminder, but "what does this number
+ * actually do" deserves a real answer.
+ */
+function showTemperatureHelp(ctx, tempInput) {
+  modal({
+    title: '温度（temperature）是什么',
+    wide: true,
+    body: h('div',
+      h('p', '模型每写一个字，都是在「下一个字最可能是哪些」的概率里挑。'
+        + '温度决定怎么挑：'),
+      h('ul', { style: { paddingLeft: '20px', color: 'var(--text-dim)' } },
+        h('li', h('strong', '0'), ' —— 永远挑概率最高的那个。同一句原文，每次译出来完全一样。'),
+        h('li', h('strong', '1.0'), ' —— 按概率抽样，偶尔选次优项。中文更自然、更活。'),
+        h('li', h('strong', '1.5 – 2'), ' —— 明显发散。措辞更花哨，也开始自由发挥。')),
+
+      h('p.tiny', { style: { marginTop: '12px', color: 'var(--warn)' } },
+        '注意：温度并不控制「有多临床」。文体是提示词里那套硬规则决定的'
+        + '（无主句、固定套语、不许加译者注……）。把温度调到 0 得到的不是「更临床」，'
+        + '而是「每次都一样」。'),
+
+      h('h3', '对你的场景'),
+      h('div.scroll-y', h('table.data',
+        h('thead', h('tr',
+          h('th', { style: { width: '90px' } }, '温度'),
+          h('th', '好处'), h('th', '代价'))),
+        h('tbody',
+          h('tr', h('td', '0 – 0.3'), h('td', '术语表遵守得最死，全篇统一'),
+            h('td', '中文可能发僵，长句偶尔别扭')),
+          h('tr', h('td', '1.0'), h('td', '中文更像人写的'),
+            h('td', '偶尔绕开术语表，自己找个近义词')),
+          h('tr', h('td', '1.3 以上'), h('td', '最流畅'),
+            h('td', '术语漂移明显，不适合技术文档'))))),
+
+      h('p.tiny.mute', { style: { marginTop: '10px' } },
+        'DeepSeek 官方对翻译的建议是 1.3，但那是针对一般文本（流畅优先）。'
+        + '你这种必须服从术语表的技术档案，官方建议偏高。'),
+
+      h('p.tiny', { style: { marginTop: '8px' } },
+        '还有一个坑：温度设成 0 时，「重译」按钮不会有任何变化——'
+        + '模型每次返回完全相同的结果，容易让人以为按钮坏了。'),
+    ),
+    actions: [
+      { label: '关闭', onClick: (c) => c() },
+      {
+        label: '设为 0.3（术语优先）',
+        primary: true,
+        onClick: async (c) => {
+          st.temperature = 0.3;
+          tempInput.value = '0.3';
+          await saveAiSettings();
+          c();
+          toast('温度已设为 0.3', 'ok');
+          ctx.refresh();
+        },
+      },
+    ],
   });
 }
 
@@ -103,6 +167,10 @@ function renderConfig(ctx) {
     const v = Number(tempInput.value);
     if (Number.isFinite(v)) st.temperature = Math.max(0, Math.min(2, v));
   });
+  const tempHelp = h('button.btn.sm', {
+    title: '温度是什么？点开看说明',
+    onclick: () => showTemperatureHelp(ctx, tempInput),
+  }, '?');
 
   const baseInput = h('input', { type: 'text', value: st.baseUrl, style: { maxWidth: '260px' } });
   baseInput.addEventListener('input', () => { st.baseUrl = baseInput.value.trim() || DEFAULT_BASE_URL; });
@@ -120,9 +188,14 @@ function renderConfig(ctx) {
   const body = h('div',
     h('div.row',
       h('div.grow', h('label.tiny.dim', 'API Key'), keyInput),
-      h('div', h('label.tiny.dim', '模型'),
-        h('div', modelSel)),
-      h('div', h('label.tiny.dim', '温度'), h('div', tempInput)),
+      h('div', h('label.tiny.dim', '模型'), h('div', modelSel)),
+    ),
+    h('div.row', { style: { marginTop: '9px', alignItems: 'flex-end' } },
+      h('div',
+        h('label.tiny.dim', '温度（temperature）'),
+        h('div.row.tight', tempInput, tempHelp)),
+      h('div.grow', { style: { paddingBottom: '7px' } },
+        h('span.tiny.mute', TEMP_HINT)),
     ),
     h('div.row', { style: { marginTop: '9px' } },
       h('div', h('label.tiny.dim', '接口地址'), h('div', baseInput)),

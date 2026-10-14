@@ -378,6 +378,31 @@ section('AI 翻译：DeepSeek 接入（打桩，不产生费用）');
   ok('there is a temperature control', !!tempInput);
   ok('there is a model selector', findAll(view(), (n) => n.tagName === 'SELECT').length >= 1);
 
+  // the temperature field must explain itself — a bare number box is useless
+  // to anyone who has not met the concept before
+  {
+    const hint = textOf(view());
+    ok('temperature carries an inline hint',
+      hint.includes('每次结果相同') && hint.includes('偏离术语表'),
+      hint.slice(0, 200));
+    const helpBtn = buttonsIn(view()).find((b) => textOf(b).trim() === '?');
+    ok('temperature has a help button', !!helpBtn);
+    if (helpBtn) {
+      helpBtn.dispatch('click');
+      await settle(14);
+      const help = textOf(modalRoot());
+      ok('help explains the concept', help.includes('概率'), help.slice(0, 160));
+      ok('help gives concrete values', help.includes('1.0') && help.includes('1.5'));
+      ok('help corrects the "lower = more clinical" misreading',
+        help.includes('临床') && /不控制|并不是/.test(help), help.slice(0, 400));
+      ok('help warns that 0 makes 重译 a no-op', help.includes('重译'));
+      ok('help offers a one-click recommended value',
+        !!buttonsIn(modalRoot()).find((b) => textOf(b).includes('0.3')));
+      const closeBtn = buttonsIn(modalRoot()).find((b) => textOf(b).trim() === '关闭');
+      if (closeBtn) { closeBtn.dispatch('click'); await settle(8); }
+    }
+  }
+
   if (keyInput) {
     keyInput.value = 'sk-stub-key';
     keyInput.dispatch('input');
