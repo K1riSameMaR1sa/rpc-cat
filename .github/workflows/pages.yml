@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+# Publishes the static app.  Only the files the browser actually needs are
+# uploaded, so tests/, scripts/ and the README stay out of the deployed site.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the single-file version
+        run: node scripts/bundle.mjs
+
+      - name: Verify the tests pass
+        run: |
+          node --version
+          node tests/run.mjs
+          node tests/smoke.mjs
+          node tests/db.mjs
+          node tests/bundle.mjs
+
+      - name: Stage the site
+        run: |
+          mkdir -p _site
+          cp -r index.html rpc-cat.html css js data _site/
+          # GitHub Pages runs Jekyll by default; this opts out so nothing is
+          # filtered or rewritten.
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

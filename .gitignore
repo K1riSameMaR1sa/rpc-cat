@@ -1,0 +1,22 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# node (there are no runtime dependencies, but be safe)
+node_modules/
+npm-debug.log*
+
+# Large memory files: import these through the app instead of committing them.
+# The small demo subset in data/demo-tm.tmx IS committed on purpose.
+rpc-tm/
+*.tmx.bak
+!data/demo-tm.tmx
+
+# NOTE: rpc-cat.html is a build artifact (npm run build) but IS committed on
+# purpose, so that anyone can clone and double-click it without a toolchain.

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RPC CAT · 管理局翻译工作台</title>
+<meta name="description" content="RPC 管理局翻译辅助工具：TMX 对齐制作、记忆库管理、CAT 式翻译工作台。纯前端，数据留在本地。">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230b0b0d'/><path d='M16 5 L27 27 H5 Z' fill='none' stroke='%23c62828' stroke-width='2.5'/></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+      <path d="M16 4 L28 28 H4 Z" fill="none" stroke="currentColor" stroke-width="2.4"/>
+      <circle cx="16" cy="19" r="3" fill="currentColor"/>
+    </svg>
+    <span>RPC&nbsp;CAT</span>
+  </div>
+
+  <label class="mem-picker">
+    <span>记忆库</span>
+    <select id="activeMemory" title="选择用于翻译记忆与匹配的记忆库"></select>
+  </label>
+
+  <div class="spacer"></div>
+
+  <button class="btn" id="btnImportTmx" title="导入 TMX 记忆库">导入 TMX</button>
+  <button class="btn" id="btnExportTmx" title="导出当前记忆库">导出 TMX</button>
+  <button class="btn ghost" id="btnHelp" title="使用说明">?</button>
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <button class="nav-item active" data-view="workbench">
+      <span class="ico">▤</span><span>工作台</span>
+    </button>
+    <button class="nav-item" data-view="align">
+      <span class="ico">⇄</span><span>对齐制作</span>
+    </button>
+    <button class="nav-item" data-view="memory">
+      <span class="ico">▦</span><span>记忆库</span>
+    </button>
+    <button class="nav-item" data-view="corpus">
+      <span class="ico">▧</span><span>语料库</span>
+    </button>
+    <button class="nav-item" data-view="settings">
+      <span class="ico">⚙</span><span>设置</span>
+    </button>
+    <div class="sidebar-foot">
+      <div id="storageStat" class="tiny"></div>
+    </div>
+  </nav>
+
+  <main id="view" class="view" tabindex="-1"></main>
+</div>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="modalRoot"></div>
+
+<!--BOOT-WARN-START (removed from the single-file build, which cannot fail this way)-->
+<div id="bootWarn" class="boot-warn" hidden>
+  <div class="boot-warn-inner">
+    <h2>脚本没有加载</h2>
+    <p>页面里的 JavaScript 没有执行，所以所有按钮都不会有反应。</p>
+    <p><strong>最常见的原因：直接双击打开了本文件。</strong>
+       浏览器的安全策略禁止 <code>file://</code> 下的 ES 模块，
+       脚本会被直接拦掉。</p>
+    <p>三种解决办法，任选其一：</p>
+    <ol>
+      <li><strong>打开同目录下的 <code>rpc-cat.html</code></strong>（单文件版，
+          双击即可用，功能完全一致）；</li>
+      <li>在本目录起一个本地服务器：
+          <code>npm run serve</code> 或 <code>python -m http.server 8080</code>，
+          然后访问 <code>http://localhost:8080/</code>；</li>
+      <li>部署到 GitHub Pages 后访问线上地址。</li>
+    </ol>
+    <p class="tiny">若你是通过 <code>http://</code> 打开的还看到这条提示，
+       请按 F12 打开控制台，把红色的报错信息发出来。</p>
+  </div>
+</div>
+
+<script>
+// If the module graph never executes, tell the user why instead of leaving
+// them with buttons that silently do nothing.
+setTimeout(function () {
+  if (window.__rpcCatBooted) return;
+  var n = document.getElementById('bootWarn');
+  if (n) n.hidden = false;
+}, 1500);
+</script>
+<!--BOOT-WARN-END-->
+
+<input type="file" id="fileTmx" accept=".tmx,.xml" hidden>
+<input type="file" id="fileAny" hidden>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

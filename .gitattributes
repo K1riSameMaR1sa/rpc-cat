@@ -1,0 +1,18 @@
+# Normalise line endings to LF in the repository. The source files are authored
+# with LF; without this, a Windows checkout would introduce CRLF churn across
+# every commit.
+* text=auto eol=lf
+
+# Binary-ish assets that must never be text-converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# The TMX corpus is UTF-8 XML; keep it LF and diffable.
+*.tmx text eol=lf
+*.tsv text eol=lf
+*.json text eol=lf

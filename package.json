@@ -1,0 +1,18 @@
+{
+  "name": "rpc-cat",
+  "version": "1.0.0",
+  "description": "RPC 管理局翻译辅助工作台 —— TMX 对齐制作、记忆库管理、CAT 式翻译。纯前端，数据留在本地。",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/bundle.mjs",
+    "test": "node tests/run.mjs && node tests/smoke.mjs && node tests/db.mjs && node tests/bundle.mjs",
+    "test:unit": "node tests/run.mjs",
+    "test:smoke": "node tests/smoke.mjs",
+    "test:db": "node tests/db.mjs",
+    "test:bundle": "node tests/bundle.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "keywords": ["tmx", "translation-memory", "cat", "rpc-authority", "alignment"],
+  "license": "MIT"
+}
