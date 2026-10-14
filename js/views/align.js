@@ -9,8 +9,9 @@
 import * as db from '../db.js';
 import { buildTmx, parseTmx, toPairs } from '../tmx.js';
 import {
-  splitBlocks, splitSentencesEn, splitSentencesZh,
+  splitSentencesEn, splitSentencesZh,
 } from '../segment.js';
+import { translatableBlocks } from '../document.js';
 import { alignBlocks, makeBlocks, buildTUs, MIN_EMIT } from '../align.js';
 import {
   h, mount, toast, modal, downloadText, pickFile, readText, scoreClass,
@@ -316,11 +317,11 @@ function doAlign(ctx, enText, zhText, name) {
   const zh = (zhText || '').trim();
   if (!en || !zh) { toast('请同时填入英文原文与中文译文', 'err'); return; }
 
-  const enBlocks = splitBlocks(en);
-  const zhBlocks = splitBlocks(zh);
+  const enBlocks = translatableBlocks(en, 'en-US');
+  const zhBlocks = translatableBlocks(zh, 'zh-CN');
   const enB = makeBlocks(enBlocks);
   const zhB = makeBlocks(zhBlocks);
-  if (!enB.length || !zhB.length) { toast('没有解析出段落', 'err'); return; }
+  if (!enB.length || !zhB.length) { toast('没有解析出可对齐的段落', 'err'); return; }
 
   toast('正在对齐…');
   const pairs = alignBlocks(enB, zhB);

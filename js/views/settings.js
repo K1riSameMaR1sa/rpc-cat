@@ -15,15 +15,20 @@ export function render(ctx) {
   wrap.append(h('p.sub', '数据全部保存在当前浏览器中。清除浏览器数据会一并删除，请定期导出备份。'));
 
   wrap.append(h('div.card',
+    h('h2', { style: { marginTop: 0 } }, '总记忆库'),
+    renderMasterCard(ctx),
+  ));
+
+  wrap.append(h('div.card',
     h('h2', { style: { marginTop: 0 } }, '导入 / 导出'),
     h('div.row',
       h('button.btn.primary', {
         onclick: async () => {
-          const f = await pickFile({ accept: '.tmx,.xml' });
+          const f = await pickFile({ accept: '.tmx,.xml,.gz' });
           if (!f) return;
           await ctx.importTmxFile(f);
         },
-      }, '导入 TMX 记忆库'),
+      }, '导入 TMX / TMX.GZ'),
       h('button.btn', {
         onclick: async () => {
           const f = await pickFile({ accept: '.json' });
@@ -110,8 +115,50 @@ export function render(ctx) {
   return wrap;
 }
 
-async function renderStorage(host) {
-  const mems = await db.listMemories();
+function renderMasterCard(ctx) {
+  const cfg = ctx.state.config;
+  const m = cfg && cfg.master;
+  const session = ctx.state.session;
+
+  if (!m || !m.units) {
+    return h('div',
+      h('p.dim', '这个版本没有内置总记忆库。'),
+      h('p.tiny', '维护者可以用 npm run make-master 从完整 TMX 生成 data/rpc-memory.tmx.gz。'));
+  }
+
+  const alreadyWritten = ctx.state.memories.some(
+    (x) => x.name === m.name || Math.abs((x.count || 0) - m.units) < 5);
+
+  return h('div',
+    h('div.stat-grid', { style: { marginBottom: '12px' } },
+      h('div.stat', h('div.v', fmtNum(m.units)), h('div.k', '翻译单元')),
+      h('div.stat', h('div.v', fmtBytes(m.bytes || 0)), h('div.k', '体积（压缩后）')),
+      h('div.stat', h('div.v', `${m.srcLang} → ${m.tgtLang}`), h('div.k', '语言对')),
+      h('div.stat', h('div.v', 'CC BY-SA 3.0'), h('div.k', '授权'))),
+    h('p.dim', m.name),
+    h('p.tiny.mute', m.attribution || ''),
+    h('div.row', { style: { marginTop: '12px' } },
+      h('button.btn.primary', {
+        onclick: async () => { await ctx.openMasterGate(ctx); },
+      }, alreadyWritten ? '重新载入总记忆库…' : '载入总记忆库…'),
+      session
+        ? h('button.btn', { onclick: () => { ctx.clearSessionMemory(); ctx.refresh(); } },
+            `清除临时记忆库（${fmtNum(session.units.length)} 条）`)
+        : null,
+      alreadyWritten
+        ? h('span.pill.ok', '本机已写入')
+        : h('span.tiny.mute', '需要管理员口令与授权确认')),
+    h('p.tiny', { style: { marginTop: '10px' } },
+      '载入时可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
+      + '（仅放在内存里供本次查证）。'),
+    cfg.adminCodeIsDefault
+      ? h('p.tiny', { style: { color: 'var(--warn)', marginTop: '8px' } },
+          '⚠ 站点仍在使用默认管理员口令，维护者请运行 npm run set-code -- <新口令> 更换。')
+      : null,
+  );
+}
+
+async function renderStorage(host) {  const mems = await db.listMemories();
   const docs = await db.listDocuments();
   const u = await db.usage();
   const total = mems.reduce((a, m) => a + (m.count || 0), 0);

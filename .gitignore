@@ -20,3 +20,5 @@ rpc-tm/
 
 # NOTE: rpc-cat.html is a build artifact (npm run build) but IS committed on
 # purpose, so that anyone can clone and double-click it without a toolchain.
+# The --with-master variant embeds the whole memory (4.5 MB) and is NOT committed.
+rpc-cat-full.html

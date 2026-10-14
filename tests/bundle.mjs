@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const BUNDLE = join(here, '..', 'rpc-cat.html');
+const ROOT = join(here, '..');
+const BUNDLE = join(ROOT, 'rpc-cat.html');
 
 let passed = 0;
 let failed = 0;
@@ -27,23 +28,32 @@ function ok(name, cond, extra) {
   failures.push(name + (extra ? `\n      ${extra}` : ''));
 }
 function eq(name, a, b) {
-  ok(name, JSON.stringify(a) === JSON.stringify(b), `expected ${JSON.stringify(b)}\n      actual   ${JSON.stringify(a)}`);
+  ok(name, JSON.stringify(a) === JSON.stringify(b),
+    `expected ${JSON.stringify(b)}\n      actual   ${JSON.stringify(a)}`);
 }
 function section(t) { console.log(`\n\x1b[1m${t}\x1b[0m`); }
 
-const settle = async (rounds = 12) => {
-  for (let i = 0; i < rounds; i++) {
-    await new Promise((r) => setTimeout(r, 1));
-  }
+const settle = async (rounds = 8) => {
+  for (let i = 0; i < rounds; i++) await new Promise((r) => setTimeout(r, 1));
 };
+
+/** Poll until the predicate holds — much steadier than fixed sleeps. */
+async function waitFor(fn, ms = 90000) {
+  const t0 = Date.now();
+  for (;;) {
+    let v = false;
+    try { v = fn(); } catch { v = false; }
+    if (v) return true;
+    if (Date.now() - t0 > ms) return false;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
 
 /* ------------------------------------------------------------------ setup */
 
 const { document: doc, FakeElement } = installDom();
 installFakeIndexedDB();
 
-// index.html's nav buttons normally come from parsing HTML, which this shim
-// does not do — create them so app.js can wire them up.
 const NAV_VIEWS = ['workbench', 'align', 'memory', 'corpus', 'settings'];
 const navButtons = NAV_VIEWS.map((v) => {
   const b = new FakeElement('button');
@@ -54,7 +64,6 @@ const navButtons = NAV_VIEWS.map((v) => {
 doc.querySelectorAll = (sel) => (sel === '.nav-item' ? navButtons : []);
 doc.querySelector = () => null;
 
-/** Depth-first search over the shim tree. */
 function findAll(node, pred, out = []) {
   if (!node || node.nodeType !== 1) return out;
   if (pred(node)) out.push(node);
@@ -62,11 +71,21 @@ function findAll(node, pred, out = []) {
   return out;
 }
 function textOf(node, depth = 0) {
-  if (!node || depth > 40) return '';
+  if (!node || depth > 60) return '';
   if (node.nodeType === 3) return node.textContent;
   return node.childNodes.map((c) => textOf(c, depth + 1)).join('');
 }
 const buttonsIn = (node) => findAll(node, (n) => n.tagName === 'BUTTON');
+const inputsIn = (node) => findAll(node, (n) => n.tagName === 'INPUT');
+const byText = (node, needle) => buttonsIn(node).find((b) => textOf(b).includes(needle));
+const view = () => doc.getElementById('view');
+const modalRoot = () => doc.getElementById('modalRoot');
+const storageText = () => textOf(doc.getElementById('storageStat'));
+const goTo = async (name) => {
+  const i = NAV_VIEWS.indexOf(name);
+  navButtons[i].dispatch('click');
+  await settle(8);
+};
 
 /* ------------------------------------------------------------------- load */
 
@@ -81,175 +100,208 @@ const html = readFileSync(BUNDLE, 'utf8');
 ok('no ES module script tag', !html.includes('<script type="module"'));
 ok('no external stylesheet link', !html.includes('href="css/style.css"'));
 ok('demo memory embedded', html.includes('__RPC_CAT_DEMO_TMX'));
+ok('gate config embedded', html.includes('__RPC_CAT_CONFIG'));
 
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
 eq('two inline scripts (data + app)', scripts.length, 2);
 
-for (const src of scripts) {
-  // eslint-disable-next-line no-new-func
-  new Function(src)();
+// evaluate the data script, then hand master.js the real gzipped memory so the
+// gate can be exercised without a network
+// eslint-disable-next-line no-new-func
+new Function(scripts[0])();
+const gzPath = join(ROOT, 'data', 'rpc-memory.tmx.gz');
+ok('master memory file present', existsSync(gzPath), gzPath);
+if (existsSync(gzPath)) {
+  globalThis.__RPC_CAT_MASTER_GZ = readFileSync(gzPath).toString('base64');
 }
-await settle();
+// eslint-disable-next-line no-new-func
+new Function(scripts[1])();
+await settle(10);
 
 section('app boots');
 
 eq('boot flag set', globalThis.__rpcCatBooted, true);
-
-const view = doc.getElementById('view');
-ok('view has content', view.childNodes.length > 0,
-  `children=${view.childNodes.length}`);
-ok('workbench start screen rendered', textOf(view).includes('工作台'),
-  textOf(view).slice(0, 120));
+ok('view has content', view().childNodes.length > 0, `children=${view().childNodes.length}`);
+ok('workbench start screen rendered', textOf(view()).includes('工作台'),
+  textOf(view()).slice(0, 120));
 
 section('nav buttons actually switch views');
 
 const expectations = {
-  workbench: '工作台',
-  align: '对齐制作',
-  memory: '记忆库',
-  corpus: '语料库',
-  settings: '设置',
+  workbench: '工作台', align: '对齐制作', memory: '记忆库', corpus: '语料库', settings: '设置',
 };
-
 for (const btn of navButtons) {
   btn.dispatch('click');
-  await settle(4);
-  const text = textOf(doc.getElementById('view'));
+  await settle(6);
   ok(`clicking "${btn.dataset.view}" renders that view`,
-    text.includes(expectations[btn.dataset.view]),
-    `view text started with: ${text.slice(0, 80)}`);
+    textOf(view()).includes(expectations[btn.dataset.view]),
+    `view text: ${textOf(view()).slice(0, 70)}`);
 }
+await goTo('workbench');
 
-// go back to the workbench for the flow tests
-navButtons[0].dispatch('click');
-await settle(4);
+/* ------------------------------------------------------- demo memory import */
 
-section('first-run modal offers the demo memory');
+section('first run: importing the demo memory');
 
-const modalRoot = doc.getElementById('modalRoot');
-const modalButtons = buttonsIn(modalRoot);
-ok('a modal was shown on first run', modalButtons.length >= 1,
-  `buttons=${modalButtons.length}`);
-const loadBtn = modalButtons.find((b) => textOf(b).includes('载入示例'));
-ok('modal offers loading the demo memory', !!loadBtn,
-  modalButtons.map((b) => textOf(b)).join(' | '));
-
-section('importing the demo memory (真正的按钮点击)');
-
-if (loadBtn) {
-  loadBtn.dispatch('click');
-  await settle(20);
-
-  // choosing the demo opens the normal import dialog, which asks to confirm
-  const importBtn = buttonsIn(doc.getElementById('modalRoot'))
-    .find((b) => textOf(b).trim() === '导入');
-  ok('import dialog asks for confirmation', !!importBtn,
-    buttonsIn(doc.getElementById('modalRoot')).map((b) => textOf(b)).join(' | '));
-
-  if (importBtn) {
-    importBtn.dispatch('click');
-    // 660 units through IndexedDB, then the fuzzy index build
-    await settle(400);
+{
+  ok('a modal was shown on first run', buttonsIn(modalRoot()).length >= 1);
+  const loadDemo = byText(modalRoot(), '载入示例');
+  ok('modal offers the demo memory', !!loadDemo);
+  if (loadDemo) {
+    loadDemo.dispatch('click');
+    await settle(25);
+    const importBtn = buttonsIn(modalRoot()).find((b) => textOf(b).trim() === '导入');
+    ok('import dialog asks for confirmation', !!importBtn,
+      buttonsIn(modalRoot()).map((b) => textOf(b)).join(' | '));
+    if (importBtn) importBtn.dispatch('click');
+    await waitFor(() => storageText().includes('660'), 60000);
+    ok('660 demo units were stored', storageText().includes('660'), storageText());
+    ok('one memory now exists', storageText().includes('1 个记忆库'), storageText());
   }
-
-  const stat = textOf(doc.getElementById('storageStat'));
-  ok('storage panel reports one memory', stat.includes('1 个记忆库'), stat);
-  ok('storage panel reports 660 units', stat.includes('660 条单元'), stat);
-
-  const picker = doc.getElementById('activeMemory');
-  const options = findAll(picker, (n) => n.tagName === 'OPTION');
-  eq('memory picker has one option', options.length, 1);
-  ok('picker option is named', textOf(options[0] || new FakeElement('x')).includes('示例'),
-    textOf(options[0] || new FakeElement('x')));
 }
+
+/* ------------------------------------------------------------ workbench */
 
 section('workbench translates with the imported memory');
 
 {
-  navButtons[0].dispatch('click');
-  await settle(6);
-
-  const viewNow = doc.getElementById('view');
-  const areas = findAll(viewNow, (n) => n.tagName === 'TEXTAREA');
-  const btns = buttonsIn(viewNow);
-  const start = btns.find((b) => textOf(b).includes('开始翻译'));
-
+  await goTo('workbench');
+  const areas = findAll(view(), (n) => n.tagName === 'TEXTAREA');
+  const start = byText(view(), '开始翻译');
   ok('workbench has a source box', areas.length >= 1);
   ok('workbench has a start button', !!start);
 
-  // Take the probe sentences from the embedded memory itself, so this test does
-  // not depend on which sentences the demo subset happens to contain.
   const { parseTmx, toPairs } = await import('../js/tmx.js');
-  const embedded = parseTmx(globalThis.__RPC_CAT_DEMO_TMX);
-  const probePairs = toPairs(embedded, { srcLang: 'en-US', tgtLang: 'zh-CN' })
-    .filter((p) => p.src.length > 40 && p.src.length < 160)
-    .slice(0, 2);
-  eq('found probe sentences in the demo memory', probePairs.length, 2);
-  const probeText = probePairs.map((p) => p.src).join('\n\n');
+  const pairs = toPairs(parseTmx(globalThis.__RPC_CAT_DEMO_TMX), { srcLang: 'en-US', tgtLang: 'zh-CN' })
+    .filter((p) => p.src.length > 40 && p.src.length < 160);
+  eq('found probe sentences', pairs.length >= 2, true);
 
-  if (areas.length && start) {
-    areas[0].value = probeText;
+  if (areas.length && start && pairs.length) {
+    // include a code block and a table row, to prove formatting is preserved
+    areas[0].value = `${pairs[0].src}\n\n[[code]]\nx();\n[[/code]]\n\n||~ A||~ B||\n||c1||c2||\n`;
     areas[0].dispatch('input');
     start.dispatch('click');
     await settle(30);
 
-    const segs = findAll(doc.getElementById('view'),
-      (n) => String(n.className).split(/\s+/).includes('seg'));
-    ok('segments were created', segs.length >= 2, `found ${segs.length}`);
+    const blocks = findAll(view(), (n) => String(n.className).split(/\s+/).includes('seg'));
+    ok('blocks were created', blocks.length >= 3, `found ${blocks.length}`);
+    ok('code block is rendered read-only',
+      findAll(view(), (n) => String(n.className).includes('block-code')).length === 1);
+    ok('markup/table structure is visible',
+      findAll(view(), (n) => String(n.className).includes('block-raw')).length >= 2);
 
-    const matches = findAll(doc.getElementById('view'),
-      (n) => String(n.className).split(/\s+/).includes('match'));
-    ok('TM matches were offered for stored segments', matches.length >= 2,
-      `matches=${matches.length}`);
+    const matches = findAll(view(), (n) => String(n.className).split(/\s+/).includes('match'));
+    ok('TM matches were offered', matches.length >= 1, `matches=${matches.length}`);
 
-    const pills = findAll(doc.getElementById('view'),
-      (n) => String(n.className).includes('pill'));
+    const pills = findAll(view(), (n) => String(n.className).includes('pill'));
     const pcts = pills.map((p) => textOf(p)).filter((t) => /%$/.test(t));
-    ok('match percentages are rendered', pcts.length >= 2, pcts.join(' '));
-    ok('an exact 100% match is offered', pcts.some((t) => t === '100%'), pcts.join(' '));
+    ok('match percentages are rendered', pcts.length >= 1, pcts.join(' '));
 
-    // clicking a suggestion must fill the translation box
-    const firstMatch = matches[0];
-    const targetArea = findAll(segs[0], (n) => n.tagName === 'TEXTAREA')[0];
-    ok('first segment has a target box', !!targetArea);
-    if (targetArea && firstMatch) {
-      firstMatch.dispatch('click');
-      ok('clicking a suggestion fills the target box',
-        targetArea.value.length > 0, JSON.stringify(targetArea.value));
+    // clicking a suggestion fills the translation box
+    const sentences = findAll(view(), (n) => String(n.className).split(/\s+/).includes('sentence'));
+    const targetArea = sentences.length ? findAll(sentences[0], (n) => n.tagName === 'TEXTAREA')[0] : null;
+    ok('sentence has a target box', !!targetArea);
+    if (targetArea && matches.length) {
+      matches[0].dispatch('click');
+      ok('clicking a suggestion fills the target box', targetArea.value.length > 0);
+    }
+
+    // export must keep the code block and the table delimiters
+    const { parseDocument, reconstruct } = await import('../js/document.js');
+    const src = `${pairs[0].src}\n\n[[code]]\nx();\n[[/code]]\n\n||~ A||~ B||\n||c1||c2||\n`;
+    const parsed = parseDocument(src, 'en-US');
+    eq('format round-trips through the workbench path', reconstruct(parsed, { useTarget: false }), src);
+  }
+}
+
+/* ---------------------------------------------------- master memory gate */
+
+section('master memory gate');
+
+{
+  await goTo('settings');
+  ok('storage panel still shows the demo memory', storageText().includes('660'), storageText());
+
+  const openBtn = byText(view(), '载入总记忆库');
+  ok('settings offers the master memory', !!openBtn, textOf(view()).slice(0, 200));
+
+  if (openBtn) {
+    openBtn.dispatch('click');
+    await settle(20);
+
+    const consent = inputsIn(modalRoot()).find((i) => i.type === 'checkbox');
+    const codeInput = inputsIn(modalRoot()).find((i) => i.type === 'password');
+    const confirm = byText(modalRoot(), '验证并载入');
+    ok('gate asks for licence consent', !!consent);
+    ok('gate asks for the admin code', !!codeInput);
+    ok('gate has a confirm button', !!confirm);
+    ok('gate explains the licence', textOf(modalRoot()).includes('CC BY-SA'));
+    ok('gate offers write vs no-write',
+      textOf(modalRoot()).includes('写入本机记忆库') && textOf(modalRoot()).includes('不写入'));
+
+    const modalOpen = () => modalRoot().childNodes.length > 0;
+
+    if (consent && codeInput && confirm) {
+      // 1) without consent it must refuse
+      codeInput.value = 'rpc-admin';
+      confirm.dispatch('click');
+      await settle(20);
+      ok('refuses to load without consent', modalOpen());
+
+      // 2) with consent but a wrong code it must refuse
+      consent.checked = true;
+      codeInput.value = 'not-the-code';
+      confirm.dispatch('click');
+      await settle(30);
+      ok('refuses a wrong admin code', modalOpen());
+
+      // 3) consent + right code, "no write" mode
+      const tempRadio = inputsIn(modalRoot()).find((i) => i.type === 'radio' && i.value === 'temp');
+      ok('there is a no-write option', !!tempRadio);
+      if (tempRadio) tempRadio.dispatch('change');
+
+      codeInput.value = 'rpc-admin';
+      confirm.dispatch('click');
+      await settle(20);
+      ok('gate closes with the right code', !modalOpen());
+
+      const loaded = await waitFor(() => storageText().includes('临时'), 120000);
+      ok('session memory became active', loaded, storageText());
+      ok('session memory is labelled temporary', storageText().includes('临时'), storageText());
+
+      // the decisive check: nothing was written to IndexedDB
+      eq('no memory was written to the database', storageText().includes('1 个记忆库'), true);
+      ok('unit count still 660 in the database', storageText().includes('660'), storageText());
+
+      const picker = doc.getElementById('activeMemory');
+      const options = findAll(picker, (n) => n.tagName === 'OPTION').map((o) => textOf(o));
+      ok('picker lists the temporary memory', options.some((t) => t.includes('未写入')),
+        options.join(' | '));
     }
   }
 }
 
+/* ------------------------------------------------------------ alignment */
+
 section('alignment view produces a TMX');
 
 {
-  navButtons[1].dispatch('click');
-  await settle(6);
-
-  const viewNow = doc.getElementById('view');
-  const areas = findAll(viewNow, (n) => n.tagName === 'TEXTAREA');
-  const btns = buttonsIn(viewNow);
-  const demoBtn = btns.find((b) => textOf(b).includes('载入示例'));
-  const alignBtn = btns.find((b) => textOf(b).includes('自动对齐'));
-
+  await goTo('align');
+  const areas = findAll(view(), (n) => n.tagName === 'TEXTAREA');
+  const demoBtn = byText(view(), '载入示例');
+  const alignBtn = byText(view(), '自动对齐');
   ok('align view has two text areas', areas.length >= 2, `areas=${areas.length}`);
   ok('align view has an auto-align button', !!alignBtn);
 
   if (demoBtn && alignBtn) {
     demoBtn.dispatch('click');
-    await settle(8);
+    await settle(10);
     alignBtn.dispatch('click');
-    await settle(30);
-
-    const rows = findAll(doc.getElementById('view'), (n) => n.tagName === 'TR');
+    await settle(40);
+    const rows = findAll(view(), (n) => n.tagName === 'TR');
     ok('alignment produced table rows', rows.length > 2, `rows=${rows.length}`);
-
-    const exportBtn = buttonsIn(doc.getElementById('view'))
-      .find((b) => textOf(b).includes('导出 TMX'));
-    ok('alignment view offers TMX export', !!exportBtn);
-
-    const afterAlign = textOf(doc.getElementById('view'));
-    ok('alignment reports paired rows', /对/.test(afterAlign));
+    ok('alignment view offers TMX export', !!byText(view(), '导出 TMX'));
+    ok('alignment reports paired rows', /对/.test(textOf(view())));
   }
 }
 

@@ -30,6 +30,8 @@ jobs:
         run: |
           node --version
           node tests/run.mjs
+          node tests/document.mjs
+          node tests/master.mjs
           node tests/smoke.mjs
           node tests/db.mjs
           node tests/bundle.mjs

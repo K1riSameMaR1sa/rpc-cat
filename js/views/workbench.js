@@ -1,17 +1,19 @@
 /**
  * views/workbench.js — CAT-style translation workbench.
  *
- * Paste English source -> segment by sentence -> each segment shows memory
- * matches (exact + fuzzy) and an input box.  Finished work can be saved as a
- * project, exported as a bilingual TMX, or as a translated text file.
+ * Operates on the structure-preserving document model (js/document.js) rather
+ * than a flattened sentence list, so line breaks, blank lines, list markers,
+ * table rows, Wikidot markup and code blocks all survive the round trip and
+ * the exported translation can be pasted straight back into the wiki.
  */
 
 import * as db from '../db.js';
 import { buildTmx } from '../tmx.js';
+import { detectLang, highlightPlaceholders, placeholderSignature } from '../segment.js';
 import {
-  splitBlocks, splitSentences, highlightPlaceholders, placeholderSignature,
-  cleanText,
-} from '../segment.js';
+  parseDocument, reconstruct, documentStats, collectPairs, flattenSentences,
+  KIND,
+} from '../document.js';
 import { scoreClass } from '../ui.js';
 import {
   h, mount, toast, modal, downloadText, pickFile, readText,
@@ -23,48 +25,51 @@ import {
 const wb = {
   sourceText: '',
   title: '',
-  segments: [],          // {src, tgt, note}
+  srcLang: 'en-US',
+  blocks: [],
+  flat: [],
   active: 0,
   projectId: null,
   loaded: false,
 };
 
-let segListEl = null;
+let listEl = null;
 let progressEl = null;
 let statEl = null;
 
 function reset() {
   wb.sourceText = '';
   wb.title = '';
-  wb.segments = [];
+  wb.blocks = [];
+  wb.flat = [];
   wb.active = 0;
   wb.projectId = null;
   wb.loaded = false;
 }
 
+function reparse(text, lang) {
+  wb.sourceText = text;
+  wb.srcLang = lang || detectLang(text);
+  wb.blocks = parseDocument(text, wb.srcLang);
+  wb.flat = flattenSentences(wb.blocks);
+}
+
 /* ------------------------------------------------------------------ render */
 
 export function render(ctx) {
-  const { state } = ctx;
-
   const wrap = h('div');
-
-  if (!wb.loaded) {
-    wrap.append(renderStart(ctx));
-  } else {
-    wrap.append(renderWorkspace(ctx));
-  }
-
-  if (state.indexBuilding) {
-    wrap.append(h('div.loading', '正在建立记忆库索引'));
-  }
+  if (!wb.loaded) wrap.append(renderStart(ctx));
+  else wrap.append(renderWorkspace(ctx));
+  if (ctx.state.indexBuilding) wrap.append(h('div.loading', '正在建立记忆库索引'));
   return wrap;
 }
 
 function renderStart(ctx) {
   const ta = h('textarea', {
     rows: 14,
-    placeholder: '在此粘贴英文原文（支持 Wikidot 语法）。\n\n也可以点「打开文件」载入 .txt / .wikidot 文本；\n或点「从记忆库取一段」用记忆库里的英文句子练手。',
+    placeholder: '在此粘贴英文原文（Wikidot 语法原样保留）。\n\n'
+      + '换行、空行、列表与标题标记、||表格||、[[code]] 代码块、\n'
+      + '[[module]] / [[include]] 等标记都会被完整保留，不会被断句切碎。',
     value: wb.sourceText,
   });
   ta.addEventListener('input', () => { wb.sourceText = ta.value; });
@@ -84,62 +89,52 @@ function renderStart(ctx) {
       if (/\.html?$/i.test(f.name)) text = stripHtml(text);
       ta.value = text;
       wb.sourceText = text;
-      if (!titleInput.value) { titleInput.value = f.name.replace(/\.[^.]+$/, ''); wb.title = titleInput.value; }
+      if (!titleInput.value) {
+        titleInput.value = f.name.replace(/\.[^.]+$/, '');
+        wb.title = titleInput.value;
+      }
     },
   }, '打开文件');
 
-  const sampleBtn = h('button.btn', {
-    onclick: () => loadSample(ctx, ta, titleInput),
-  }, '载入示例原文');
-
   return h('div',
     h('h1', '工作台'),
-    h('p.sub', '粘贴英文原文，逐句翻译；每一句都会自动从当前记忆库中检索匹配。'),
+    h('p.sub', '粘贴原文逐句翻译；原文格式会被完整保留，导出时按原结构回填。'),
     h('div.card',
-      h('div.row', { style: { marginBottom: '10px' } },
-        h('div.grow', titleInput),
-        openBtn, sampleBtn,
-      ),
+      h('div.row', { style: { marginBottom: '10px' } }, h('div.grow', titleInput), openBtn),
       ta,
       h('div.row', { style: { marginTop: '12px' } },
         startBtn,
-        h('span.tiny', '译文只保存在你的浏览器里，请用「导出」备份。'),
-      ),
+        h('span.tiny', '译文只保存在你的浏览器里，请用「导出」备份。')),
     ),
     ctx.state.memories.length ? null : h('div.card',
       h('h2', '还没有记忆库'),
-      h('p.dim', '翻译时没有记忆库也能用，但不会有自动匹配。可以先到「对齐制作」用中英原文生成一个，或导入现成的 TMX。'),
+      h('p.dim', '没有记忆库也能翻译，但不会有自动匹配。可以到「记忆库」载入总记忆库，或到「对齐制作」自己生成一个。'),
     ),
   );
 }
 
 function startTranslation(ctx, text, title) {
-  const src = cleanText(text || '');
-  if (!src) { toast('请先粘贴原文', 'err'); return; }
-  const blocks = splitBlocks(src);
-  const segs = [];
-  for (const b of blocks) {
-    // keep structural Wikidot lines whole; split prose into sentences
-    const isStruct = /^(\*+\s|#+\s|\++\s|>+\s|\|\||-{4,}|={4,})/.test(b);
-    const parts = isStruct ? [b] : splitSentences(b, 'en-US');
-    for (const p of parts) if (p.trim()) segs.push({ src: p, tgt: '', note: '' });
+  if (!String(text || '').trim()) { toast('请先粘贴原文', 'err'); return; }
+  reparse(text, detectLang(text));
+  if (!wb.flat.length && !wb.blocks.some((b) => b.kind === KIND.CODE)) {
+    toast('没有解析出可翻译的内容', 'err');
+    return;
   }
-  if (!segs.length) { toast('没有解析出可翻译的句子', 'err'); return; }
-  wb.sourceText = text;
   wb.title = title || '未命名项目';
-  wb.segments = segs;
-  wb.active = 0;
   wb.loaded = true;
   wb.projectId = null;
-  toast(`已切分为 ${fmtNum(segs.length)} 句`, 'ok');
+  wb.active = 0;
+  const st = documentStats(wb.blocks);
+  toast(`已解析：${fmtNum(st.sentences)} 句，${fmtNum(st.kinds.code)} 个代码块`, 'ok');
   ctx.refresh();
 }
 
-function renderWorkspace(ctx) {
-  const { state } = ctx;
+/* ------------------------------------------------------------ workspace */
 
-  segListEl = h('div.seg-list');
-  renderSegments(ctx);
+function renderWorkspace(ctx) {
+  const state = ctx.state;
+  listEl = h('div.seg-list');
+  renderBlocks(ctx);
 
   progressEl = h('div.progress-inner');
   statEl = h('div');
@@ -157,8 +152,7 @@ function renderWorkspace(ctx) {
         ? h('div',
             h('div', h('strong', state.activeMemory.name)),
             h('div.tiny', `${state.activeMemory.srcLang} → ${state.activeMemory.tgtLang}`),
-            h('div.tiny', `${fmtNum(state.activeMemory.count)} 条单元`),
-            state.index ? h('div.tiny', `索引：${fmtNum(state.index.stats().distinctSources)} 个不同源句`) : null)
+            h('div.tiny', `${fmtNum(state.activeMemory.count)} 条单元`))
         : h('div.dim', '未选择记忆库'),
     ),
     renderConcordancePanel(ctx),
@@ -166,14 +160,24 @@ function renderWorkspace(ctx) {
 
   return h('div',
     h('div.row', { style: { marginBottom: '12px' } },
-      h('h1.grow', { style: { margin: 0 } }, wb.title || '工作台'),
-      h('button.btn', { onclick: () => exportBilingual(ctx) }, '导出 TMX'),
-      h('button.btn', { onclick: () => exportTarget() }, '导出译文'),
+      h('div.grow',
+        h('h1', { style: { margin: 0 } }, wb.title || '工作台'),
+        h('div.tiny', formatSummary())),
+      h('button.btn', { onclick: () => previewOutput() }, '预览输出'),
+      h('button.btn', { onclick: () => exportTarget() }, '导出译文（保留格式）'),
+      h('button.btn', { onclick: () => exportBilingual() }, '导出 TMX'),
       h('button.btn', { onclick: () => saveProject(ctx) }, '保存项目'),
       h('button.btn.ghost', {
         onclick: async () => {
-          if (wb.segments.some((s) => s.tgt.trim())) {
-            const ok = await confirmDiscard();
+          if (wb.flat.some((f) => f.sentence.tgt.trim())) {
+            const ok = await new Promise((resolve) => modal({
+              title: '放弃当前进度？',
+              body: '当前项目有未导出的译文，新建后将会丢失。',
+              actions: [
+                { label: '取消', onClick: (c) => { c(); resolve(false); } },
+                { label: '放弃', danger: true, onClick: (c) => { c(); resolve(true); } },
+              ],
+            }));
             if (!ok) return;
           }
           reset();
@@ -181,100 +185,169 @@ function renderWorkspace(ctx) {
         },
       }, '新建'),
     ),
-    h('div.wb', h('div', segListEl), side),
+    h('div.wb', h('div', listEl), side),
   );
 }
 
-/* -------------------------------------------------------------- segments */
+function formatSummary() {
+  const st = documentStats(wb.blocks);
+  const bits = [`${fmtNum(st.blocks)} 块`, `${fmtNum(st.sentences)} 句`];
+  if (st.kinds.code) bits.push(`${fmtNum(st.kinds.code)} 代码块`);
+  if (st.kinds.table) bits.push(`${fmtNum(st.kinds.table)} 表格行`);
+  return bits.join(' · ');
+}
 
-function renderSegments(ctx) {
-  if (!segListEl) return;
-  const frag = [];
-  wb.segments.forEach((seg, i) => frag.push(renderSegment(ctx, seg, i)));
-  mount(segListEl, ...frag);
+/* --------------------------------------------------------------- blocks */
+
+function renderBlocks(ctx) {
+  if (!listEl) return;
+  const nodes = [];
+  let flatIndex = 0;
+
+  for (let bi = 0; bi < wb.blocks.length; bi++) {
+    const b = wb.blocks[bi];
+    if (b.kind === KIND.BLANK) {
+      nodes.push(h('div.block-gap', { title: '空行（保留）' }));
+      continue;
+    }
+    if (b.kind === KIND.CODE) {
+      nodes.push(renderCodeBlock(b, bi));
+      continue;
+    }
+    if (b.kind === KIND.MARKUP) {
+      nodes.push(h('div.block-markup', { title: '标记行（原样保留，不翻译）' },
+        h('span.pill', '标记'), h('code', b.parts[0].text)));
+      continue;
+    }
+
+    const textParts = b.parts.filter((p) => p.type === 'text');
+    nodes.push(renderTextBlock(ctx, b, bi, textParts, () => {
+      const start = flatIndex;
+      let n = 0;
+      for (const p of textParts) n += p.sentences.length;
+      flatIndex += n;
+      return { start, count: n };
+    }));
+  }
+
+  mount(listEl, ...nodes);
   focusActive();
 }
 
-function renderSegment(ctx, seg, i) {
-  const done = !!seg.tgt.trim();
-  const node = h('div.seg' + (i === wb.active ? '.active' : '') + (done ? '.done' : ''),
-    { dataset: { idx: String(i) } });
+function renderCodeBlock(b, bi) {
+  return h('div.seg.block-code',
+    h('div.seg-head',
+      h('span.seg-num', `#${bi + 1}`),
+      h('span.pill', '代码块'),
+      h('span.tiny.mute', '原样保留，不翻译、不参与断句'),
+    ),
+    h('pre.block-pre', b.parts[0].text),
+  );
+}
 
-  const matches = ctx.state.index ? safeSearch(ctx.state.index, seg.src) : [];
-  const ph = placeholderSignature(seg.src);
-  const missing = done ? placeholderDiff(ph, placeholderSignature(seg.tgt)) : [];
+function renderTextBlock(ctx, block, bi, textParts, claimRange) {
+  const { start } = claimRange();
+  const node = h('div.seg', { dataset: { block: String(bi) } });
+  const kindLabel = block.kind === KIND.TABLE ? '表格行' : null;
 
   node.append(h('div.seg-head',
-    h('span.seg-num', `#${i + 1}`),
+    h('span.seg-num', `#${bi + 1}`),
+    kindLabel ? h('span.pill', kindLabel) : null,
     h('span.grow'),
-    missing.length
-      ? h('span.pill.new', { title: '译文缺少这些原文中的编号/占位符' }, `缺少 ${missing.join(' ')}`)
-      : null,
-    done ? h('span.pill.ok', '已译') : null,
+    h('span.tiny.mute', { dataset: { role: 'blockstate', block: String(bi) } }, ''),
   ));
 
-  node.append(h('div.seg-src', { html: highlightPlaceholders(seg.src) }));
+  // the exact original line, so markers and spacing are visible
+  node.append(h('pre.block-raw', { title: '原文行（格式将被保留）' }, block.parts
+    .map((p) => (p.type === 'literal' ? p.text : p.src)).join('')));
+
+  let local = start;
+  for (const part of textParts) {
+    for (const s of part.sentences) {
+      const idx = local;
+      local += 1;
+      node.append(renderSentence(ctx, s, idx, bi));
+    }
+  }
+  return node;
+}
+
+function renderSentence(ctx, sentence, idx, bi) {
+  const matches = ctx.state.index ? safeSearch(ctx.state.index, sentence.src) : [];
+  const missing = sentence.tgt.trim()
+    ? placeholderDiff(placeholderSignature(sentence.src), placeholderSignature(sentence.tgt))
+    : [];
+
+  const row = h('div.sentence' + (sentence.tgt.trim() ? '.done' : ''),
+    { dataset: { flat: String(idx), block: String(bi) } });
+
+  row.append(h('div.sentence-head',
+    h('span.sent-idx.mono', `${idx + 1}`),
+    missing.length ? h('span.pill.new', `缺少 ${missing.join(' ')}`) : null,
+    h('span.grow'),
+    h('span.tiny.mute', { dataset: { role: 'matchcount' } },
+      matches.length ? `${matches.length} 条匹配` : '无匹配'),
+  ));
+
+  row.append(h('div.seg-src', { html: highlightPlaceholders(sentence.src) }));
 
   const ta = h('textarea', {
-    rows: Math.max(2, Math.min(8, Math.ceil(seg.src.length / 60))),
-    placeholder: '输入译文…（Ctrl+Enter 确认并下一句）',
-    value: seg.tgt,
-    dataset: { seg: String(i) },
+    rows: Math.max(1, Math.min(6, Math.ceil(sentence.src.length / 58))),
+    placeholder: '译文…（Ctrl+Enter 下一句）',
+    value: sentence.tgt,
+    dataset: { flat: String(idx) },
   });
   ta.addEventListener('input', () => {
-    seg.tgt = ta.value;
-    node.classList.toggle('done', !!seg.tgt.trim());
+    sentence.tgt = ta.value;
+    row.classList.toggle('done', !!sentence.tgt.trim());
     renderStats();
+    updateBlockState(bi);
   });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      confirmSegment(seg, i);
+      gotoFlat(idx + 1);
     }
   });
-  ta.addEventListener('focus', () => {
-    wb.active = i;
-    for (const el of segListEl.querySelectorAll('.seg')) el.classList.remove('active');
-    node.classList.add('active');
-  });
-  node.append(ta);
+  ta.addEventListener('focus', () => { wb.active = idx; markActive(); });
+  row.append(ta);
 
   if (matches.length) {
     const box = h('div.seg-matches');
     for (const mt of matches) {
-      const pct = Math.round(mt.score);
       const item = h('div.match', { title: '点击填入译文' },
         h('div.m-top',
-          h('span.pill.' + scoreClass(mt.score), pct + '%'),
-          mt.unit.doc ? h('span.tiny.mute', mt.unit.doc) : null,
-        ),
-        h('div.m-src', mt.unit.src.slice(0, 220)),
-        h('div.m-tgt', mt.unit.tgt.slice(0, 220)),
+          h('span.pill.' + scoreClass(mt.score), Math.round(mt.score) + '%'),
+          mt.unit.doc ? h('span.tiny.mute', mt.unit.doc) : null),
+        h('div.m-src', mt.unit.src.slice(0, 200)),
+        h('div.m-tgt', mt.unit.tgt.slice(0, 200)),
       );
       item.addEventListener('click', () => {
         ta.value = mt.unit.tgt;
-        seg.tgt = mt.unit.tgt;
-        node.classList.toggle('done', true);
+        sentence.tgt = mt.unit.tgt;
+        row.classList.add('done');
         renderStats();
+        updateBlockState(bi);
         ta.focus();
       });
       box.append(item);
     }
-    node.append(box);
-  } else if (ctx.state.index) {
-    node.append(h('div.tiny.mute', { style: { marginTop: '6px' } }, '记忆库中没有相近的句子'));
+    row.append(box);
   }
+  return row;
+}
 
-  return node;
+function updateBlockState(bi) {
+  const el = listEl && listEl.querySelector(`[data-role="blockstate"][data-block="${bi}"]`);
+  if (!el) return;
+  const flat = wb.flat.filter((f) => f.bi === bi);
+  const done = flat.filter((f) => f.sentence.tgt.trim()).length;
+  el.textContent = flat.length ? `${done}/${flat.length}` : '';
 }
 
 function safeSearch(index, src) {
-  try {
-    return index.search(src, { limit: 3, minScore: 50 });
-  } catch (err) {
-    console.error(err);
-    return [];
-  }
+  try { return index.search(src, { limit: 3, minScore: 50 }); }
+  catch (err) { console.error(err); return []; }
 }
 
 function placeholderDiff(a, b) {
@@ -286,46 +359,52 @@ function placeholderDiff(a, b) {
   };
   const A = countOf(a.codes);
   const B = countOf(b.codes);
-  for (const [k, v] of A) {
-    const have = B.get(k) || 0;
-    if (have < v) out.push(k);
-  }
+  for (const [k, v] of A) if ((B.get(k) || 0) < v) out.push(k);
   if (a.bars > 0 && b.bars === 0) out.push('███');
   return out;
 }
 
-function confirmSegment(seg, i) {
-  if (!seg.tgt.trim()) { toast('这一句还没有译文', 'err'); return; }
-  if (i + 1 < wb.segments.length) {
-    wb.active = i + 1;
-    for (const el of segListEl.querySelectorAll('.seg')) {
-      el.classList.toggle('active', Number(el.dataset.idx) === wb.active);
-    }
-    focusActive();
-  } else {
-    toast('已是最后一句', 'ok');
+/* ------------------------------------------------------------ navigation */
+
+function markActive() {
+  if (!listEl) return;
+  for (const r of listEl.querySelectorAll('.sentence')) {
+    r.classList.toggle('active', Number(r.dataset.flat) === wb.active);
   }
-  renderStats();
+}
+
+function gotoFlat(idx) {
+  if (idx < 0 || idx >= wb.flat.length) { toast('已是最后一句', 'ok'); return; }
+  wb.active = idx;
+  markActive();
+  focusActive();
 }
 
 function focusActive() {
-  if (!segListEl) return;
-  const ta = segListEl.querySelector(`textarea[data-seg="${wb.active}"]`);
+  if (!listEl) return;
+  const ta = listEl.querySelector(`textarea[data-flat="${wb.active}"]`);
   if (ta) {
     ta.focus();
     ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } else {
+    // landed on a non-translatable block; find the next sentence
+    const next = wb.flat.findIndex((f) => f.sentence && f.sentence.tgt === '' );
+    if (next >= 0 && next !== wb.active) { wb.active = next; focusActive(); }
   }
 }
 
 function renderStats() {
   if (!statEl || !progressEl) return;
-  const total = wb.segments.length;
-  const done = wb.segments.filter((s) => s.tgt.trim()).length;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+  const st = documentStats(wb.blocks);
+  const pct = st.sentences ? Math.round((st.translated / st.sentences) * 100) : 0;
   progressEl.style.width = pct + '%';
   mount(statEl,
-    h('div', { style: { marginTop: '9px' } }, `${fmtNum(done)} / ${fmtNum(total)} 句（${pct}%）`),
-    h('div.tiny', `剩余 ${fmtNum(total - done)} 句`),
+    h('div', { style: { marginTop: '9px' } },
+      `${fmtNum(st.translated)} / ${fmtNum(st.sentences)} 句（${pct}%）`),
+    h('div.tiny', `剩余 ${fmtNum(st.sentences - st.translated)} 句`),
+    h('div.tiny', { style: { marginTop: '6px' } },
+      `保留：${fmtNum(st.kinds.code)} 代码块 · ${fmtNum(st.kinds.table)} 表格行 · `
+      + `${fmtNum(st.kinds.markup)} 标记行 · ${fmtNum(st.kinds.blank)} 空行`),
   );
 }
 
@@ -333,12 +412,7 @@ function renderStats() {
 
 function renderConcordancePanel(ctx) {
   const results = h('div', { style: { marginTop: '9px', maxHeight: '46vh', overflow: 'auto' } });
-  const input = h('input', {
-    type: 'search',
-    placeholder: '查证检索（源文或译文）…',
-    dataset: { role: 'concordance' },
-  });
-
+  const input = h('input', { type: 'search', placeholder: '查证检索（源文或译文）…' });
   const run = debounce(() => {
     const q = input.value.trim();
     if (!q || !ctx.state.index) { mount(results); return; }
@@ -348,19 +422,92 @@ function renderConcordancePanel(ctx) {
     if (!hits.length) { mount(results, h('div.tiny.mute', '没有结果')); return; }
     mount(results, ...hits.map((x) => h('div.match',
       h('div.m-src', x.unit.src.slice(0, 160)),
-      h('div.m-tgt', x.unit.tgt.slice(0, 160)),
-    )));
+      h('div.m-tgt', x.unit.tgt.slice(0, 160)))));
   }, 220);
   input.addEventListener('input', run);
-
-  return h('div.card',
-    h('h3', { style: { marginTop: 0 } }, '查证检索'),
-    input,
-    results,
-  );
+  return h('div.card', h('h3', { style: { marginTop: 0 } }, '查证检索'), input, results);
 }
 
 /* --------------------------------------------------------------- actions */
+
+function previewOutput() {
+  const text = reconstruct(wb.blocks);
+  modal({
+    title: '导出预览（保留原格式）',
+    wide: true,
+    body: h('div',
+      h('p.tiny.dim', '未翻译的句子会保留原文，代码块与标记原样输出。可直接复制粘贴回 Wikidot。'),
+      h('pre.block-pre', { style: { maxHeight: '60vh', overflow: 'auto' } }, text)),
+    actions: [
+      { label: '关闭', onClick: (c) => c() },
+      { label: '下载', primary: true, onClick: (c) => { c(); exportTarget(); } },
+    ],
+  });
+}
+
+function exportTarget() {
+  const text = reconstruct(wb.blocks);
+  downloadText(`${safe(wb.title || 'translation')}-zh.txt`, text, 'text/plain;charset=utf-8');
+  const st = documentStats(wb.blocks);
+  toast(`已导出（${fmtNum(st.translated)}/${fmtNum(st.sentences)} 句已译）`, 'ok');
+}
+
+function exportBilingual() {
+  const pairs = collectPairs(wb.blocks);
+  if (!pairs.length) { toast('还没有可导出的译文', 'err'); return; }
+  const { xml } = buildTmx({
+    units: pairs.map((p, i) => ({
+      src: p.src, tgt: p.tgt, tuid: `${wb.title || 'workbench'}#${i}`,
+      props: { 'x-doc': wb.title || 'workbench', 'x-origin': 'workbench' },
+    })),
+    srcLang: wb.srcLang, tgtLang: 'zh-CN',
+    headerProps: { Project: wb.title || 'RPC CAT workbench', segtype: 'sentence' },
+  });
+  downloadText(`${safe(wb.title || 'workbench')}.tmx`, xml, 'application/xml;charset=utf-8');
+  toast(`已导出 ${fmtNum(pairs.length)} 条双语对照`, 'ok');
+}
+
+async function saveProject(ctx) {
+  const st = documentStats(wb.blocks);
+  if (!st.translated) { toast('还没有任何译文', 'err'); return; }
+  const id = await db.saveDocument({
+    id: wb.projectId || undefined,
+    name: wb.title || '未命名项目',
+    kind: 'project',
+    srcLang: wb.srcLang,
+    tgtLang: 'zh-CN',
+    source: wb.sourceText,
+    // store by flat index; re-applied after re-parsing on open
+    translations: wb.flat.map((f) => f.sentence.tgt || ''),
+    segments: wb.flat.map((f) => ({ src: f.sentence.src, tgt: f.sentence.tgt || '' })),
+  });
+  wb.projectId = id;
+  toast(`项目已保存（${fmtNum(st.translated)} 句译文）`, 'ok');
+  void ctx;
+}
+
+/** Reopen a saved project: re-parse the source, then re-apply translations. */
+export function openProject(doc) {
+  reparse(doc.source || (doc.segments || []).map((s) => s.src).join('\n\n'), doc.srcLang);
+  const saved = doc.translations || [];
+  if (saved.length === wb.flat.length) {
+    wb.flat.forEach((f, i) => { f.sentence.tgt = saved[i] || ''; });
+  } else {
+    // fall back to matching on source text if the parser output changed
+    const byText = new Map();
+    for (const s of (doc.segments || [])) {
+      if (s.tgt) byText.set(s.src, s.tgt);
+    }
+    for (const f of wb.flat) {
+      const t = byText.get(f.sentence.src);
+      if (t) f.sentence.tgt = t;
+    }
+  }
+  wb.title = doc.name || '未命名项目';
+  wb.projectId = doc.id;
+  wb.loaded = true;
+  wb.active = Math.max(0, wb.flat.findIndex((f) => !f.sentence.tgt.trim()));
+}
 
 function stripHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -368,102 +515,14 @@ function stripHtml(html) {
     for (const el of doc.querySelectorAll(sel)) el.remove();
   }
   const content = doc.querySelector('#page-content') || doc.body;
-  // turn block elements into paragraph breaks so splitBlocks sees structure
   const blocks = [];
-  for (const el of content.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, blockquote')) {
-    const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (t) blocks.push(t);
+  for (const el of content.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, blockquote, pre')) {
+    const t = (el.textContent || '').replace(/\s+$/, '');
+    if (t.trim()) blocks.push(t);
   }
-  if (!blocks.length) return (content.textContent || '').trim();
-  return blocks.join('\n\n');
-}
-
-async function loadSample(ctx, ta, titleInput) {
-  const samples = [
-    { name: 'RPC-691 片段', text: 'RPC-691 is an MP4 video file distributed through various websites.\n\nRepeated watchers and listeners incur a number of nonspecific psychological effects.\n\nThe Authority was alerted to an abandoned warehouse in [REDACTED], Pennsylvania.' },
-    { name: '管理局简史 片段', text: 'A Brief History of the Authority\n\n1456: In the lead-up to the abortive 1456 Crusade to retake Constantinople from the Turks, Pope Callixtus III creates a semi-autonomous branch of the Papal Inquisition.\n\n16-17 July, 1462: Agents of the Auctoritas, accompanying Vlad III of Wallachia, use what is described at the time as a "blood beast".' },
-  ];
-  const pick = await new Promise((resolve) => {
-    modal({
-      title: '选择示例原文',
-      body: h('div', ...samples.map((s) => h('button.btn', {
-        style: { display: 'block', width: '100%', marginBottom: '8px', textAlign: 'left' },
-        onclick: (close) => { close(); resolve(s); },
-      }, s.name))),
-      actions: [{ label: '取消', onClick: (c) => { c(); resolve(null); } }],
-    });
-  });
-  if (!pick) return;
-  ta.value = pick.text;
-  wb.sourceText = pick.text;
-  titleInput.value = pick.name;
-  wb.title = pick.name;
-  void ctx;
-}
-
-function confirmDiscard() {
-  return new Promise((resolve) => {
-    modal({
-      title: '放弃当前进度？',
-      body: '当前项目有未导出的译文，新建后将会丢失。',
-      actions: [
-        { label: '取消', onClick: (c) => { c(); resolve(false); } },
-        { label: '放弃', danger: true, onClick: (c) => { c(); resolve(true); } },
-      ],
-    });
-  });
-}
-
-async function saveProject(ctx) {
-  const done = wb.segments.filter((s) => s.tgt.trim()).length;
-  if (!done) { toast('还没有任何译文', 'err'); return; }
-  const doc = {
-    id: wb.projectId || undefined,
-    name: wb.title || '未命名项目',
-    kind: 'project',
-    srcLang: 'en-US',
-    tgtLang: 'zh-CN',
-    source: wb.sourceText,
-    segments: wb.segments.map((s) => ({ src: s.src, tgt: s.tgt })),
-  };
-  const id = await db.saveDocument(doc);
-  wb.projectId = id;
-  toast(`项目已保存（${fmtNum(done)} 句译文）`, 'ok');
-  void ctx;
-}
-
-function exportBilingual(ctx) {
-  const units = wb.segments.filter((s) => s.tgt.trim()).map((s, i) => ({
-    src: s.src, tgt: s.tgt, tuid: `wb#${i}`,
-    props: { 'x-doc': wb.title || 'workbench', 'x-origin': 'workbench' },
-  }));
-  if (!units.length) { toast('还没有可导出的译文', 'err'); return; }
-  const { xml } = buildTmx({
-    units, srcLang: 'en-US', tgtLang: 'zh-CN',
-    headerProps: { Project: wb.title || 'RPC CAT workbench', segtype: 'sentence' },
-  });
-  downloadText(`${safe(wb.title || 'workbench')}.tmx`, xml, 'application/xml;charset=utf-8');
-  toast(`已导出 ${fmtNum(units.length)} 条双语对照`, 'ok');
-  void ctx;
-}
-
-function exportTarget() {
-  const done = wb.segments.filter((s) => s.tgt.trim());
-  if (!done.length) { toast('还没有可导出的译文', 'err'); return; }
-  const text = done.map((s) => s.tgt).join('\n');
-  downloadText(`${safe(wb.title || 'translation')}-zh.txt`, text, 'text/plain;charset=utf-8');
-  toast(`已导出 ${fmtNum(done.length)} 句译文`, 'ok');
+  return blocks.length ? blocks.join('\n\n') : (content.textContent || '').trim();
 }
 
 function safe(name) {
   return String(name).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80);
-}
-
-export function openProject(doc) {
-  wb.title = doc.name || '未命名项目';
-  wb.sourceText = doc.source || (doc.segments || []).map((s) => s.src).join('\n\n');
-  wb.segments = (doc.segments || []).map((s) => ({ src: s.src, tgt: s.tgt || '', note: s.note || '' }));
-  wb.projectId = doc.id;
-  wb.loaded = true;
-  wb.active = Math.max(0, wb.segments.findIndex((s) => !s.tgt.trim()));
 }

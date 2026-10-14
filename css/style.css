@@ -206,6 +206,59 @@ table.data tr:hover td { background: var(--surface-2); }
 .progress-outer { height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
 .progress-inner { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
+/* ---------------------------------------------- structure-preserving blocks */
+
+/* blank line in the source: shown so the layout is visible, not editable */
+.block-gap {
+  height: 9px; margin: 1px 0;
+  border-left: 3px solid var(--line);
+  border-radius: 3px; background: repeating-linear-gradient(
+    90deg, var(--surface-3) 0 5px, transparent 5px 10px);
+  opacity: .5;
+}
+.block-gap:hover { opacity: .9; }
+
+.block-markup {
+  display: flex; align-items: baseline; gap: 9px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--line-2);
+  border-radius: 6px; padding: 7px 11px; margin: 2px 0;
+}
+.block-markup code {
+  font-family: var(--mono); font-size: 12.5px; color: var(--text-mute);
+  white-space: pre-wrap; word-break: break-all;
+}
+
+.block-code {
+  background: #0d0f12; border: 1px solid var(--line);
+  border-left: 3px solid #3a4a5a;
+}
+.block-pre {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  background: #0d0f12; border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; margin: 7px 0 0;
+  white-space: pre-wrap; word-break: break-word;
+  color: #b9c4cf; overflow-x: auto;
+}
+/* the exact original line, shown so markers and spacing stay visible */
+.block-raw {
+  font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  color: var(--text-mute); background: transparent;
+  border-left: 2px solid var(--line-2); padding: 0 0 0 9px;
+  margin: 0 0 8px; white-space: pre-wrap; word-break: break-word;
+}
+
+.sentence {
+  border-left: 2px solid transparent;
+  padding: 5px 0 5px 9px; margin: 3px 0;
+  border-radius: 0 5px 5px 0;
+}
+.sentence.active { background: var(--surface-2); border-left-color: var(--accent); }
+.sentence.done { border-left-color: var(--ok); }
+.sentence-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.sent-idx { font-size: 10.5px; color: var(--text-mute); min-width: 22px; }
+.sentence textarea { margin-top: 5px; min-height: 34px; }
+
 /* ---------------------------------------------------------------- align */
 
 .align-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }

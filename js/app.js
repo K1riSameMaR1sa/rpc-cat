@@ -5,6 +5,7 @@
 import * as db from './db.js';
 import { parseTmx, buildTmx, toPairs } from './tmx.js';
 import { MemoryIndex } from './match.js';
+import { loadConfig, openMasterGate, readMaybeGzip, masterAvailable } from './master.js';
 import {
   h, mount, toast, modal, confirmDialog, downloadText, pickFile, readText,
   fmtNum, fmtBytes,
@@ -31,7 +32,11 @@ export const state = {
   index: null,          // MemoryIndex for the active memory
   indexBuilding: false,
   view: 'workbench',
+  config: null,         // data/config.json (licence text, admin hash, master info)
+  session: null,        // master memory held in memory only, never written
 };
+
+export const SESSION_ID = '__session__';
 
 /* ------------------------------------------------------------------ events */
 
@@ -43,13 +48,68 @@ export function emit() { for (const fn of listeners) fn(); }
 
 export async function refreshMemories({ keepActive = true } = {}) {
   state.memories = await db.listMemories();
-  if (!keepActive || !state.memories.some((m) => m.id === state.activeMemoryId)) {
-    state.activeMemoryId = state.memories.length ? state.memories[0].id : null;
+  const valid = state.memories.some((m) => m.id === state.activeMemoryId)
+    || (state.activeMemoryId === SESSION_ID && state.session);
+  if (!keepActive || !valid) {
+    state.activeMemoryId = state.session
+      ? SESSION_ID
+      : (state.memories.length ? state.memories[0].id : null);
   }
-  state.activeMemory = state.memories.find((m) => m.id === state.activeMemoryId) || null;
+  state.activeMemory = state.activeMemoryId === SESSION_ID
+    ? sessionAsMemory()
+    : (state.memories.find((m) => m.id === state.activeMemoryId) || null);
   renderMemoryPicker();
   await updateStorageStat();
   emit();
+}
+
+function sessionAsMemory() {
+  const s = state.session;
+  if (!s) return null;
+  return {
+    id: SESSION_ID,
+    name: `${s.name}（临时，未写入）`,
+    srcLang: s.srcLang,
+    tgtLang: s.tgtLang,
+    note: '只存在于内存中，关闭页面即消失',
+    count: s.units.length,
+    session: true,
+  };
+}
+
+/**
+ * Hold a memory in the page only — nothing touches IndexedDB.  Used for the
+ * "只本次使用，不写入" choice in the master-memory gate.
+ */
+export async function loadSessionMemory(pairs, meta) {
+  state.indexBuilding = true;
+  emit();
+  try {
+    const units = pairs.map((p) => ({
+      src: p.src, tgt: p.tgt, id: null, doc: (p.props && p.props['x-doc']) || '', props: p.props || {},
+    }));
+    state.session = {
+      name: meta.name || '总记忆库',
+      srcLang: meta.srcLang || 'en-US',
+      tgtLang: meta.tgtLang || 'zh-CN',
+      units,
+      index: new MemoryIndex(units),
+    };
+    state.activeMemoryId = SESSION_ID;
+    state.activeMemory = sessionAsMemory();
+    renderMemoryPicker();
+    await updateStorageStat();
+    toast(`临时记忆库已就绪：${fmtNum(units.length)} 条（未写入本机）`, 'ok');
+  } finally {
+    state.indexBuilding = false;
+    emit();
+  }
+}
+
+export function clearSessionMemory() {
+  state.session = null;
+  if (state.activeMemoryId === SESSION_ID) state.activeMemoryId = null;
+  refreshMemories();
 }
 
 /**
@@ -57,6 +117,11 @@ export async function refreshMemories({ keepActive = true } = {}) {
  * The shipped memory is ~29k units; this takes a moment, so it is announced.
  */
 export async function loadActiveIndex({ silent = false } = {}) {
+  if (state.activeMemoryId === SESSION_ID && state.session) {
+    state.index = state.session.index;
+    emit();
+    return;
+  }
   if (!state.activeMemoryId) {
     state.index = null;
     emit();
@@ -72,9 +137,7 @@ export async function loadActiveIndex({ silent = false } = {}) {
       src: r.src, tgt: r.tgt, id: r.id, doc: r.doc, props: r.props || {},
     }));
     state.index = new MemoryIndex(units);
-    if (!silent) {
-      toast(`记忆库已就绪：${fmtNum(units.length)} 条翻译单元`, 'ok');
-    }
+    if (!silent) toast(`记忆库已就绪：${fmtNum(units.length)} 条翻译单元`, 'ok');
   } catch (err) {
     console.error(err);
     toast('载入记忆库失败：' + err.message, 'err');
@@ -87,7 +150,9 @@ export async function loadActiveIndex({ silent = false } = {}) {
 
 export async function setActiveMemory(id, { reload = true } = {}) {
   state.activeMemoryId = id;
-  state.activeMemory = state.memories.find((m) => m.id === id) || null;
+  state.activeMemory = id === SESSION_ID
+    ? sessionAsMemory()
+    : (state.memories.find((m) => m.id === id) || null);
   renderMemoryPicker();
   emit();
   if (reload) await loadActiveIndex();
@@ -98,12 +163,20 @@ export async function setActiveMemory(id, { reload = true } = {}) {
 function renderMemoryPicker() {
   const sel = document.getElementById('activeMemory');
   if (!sel) return;
-  mount(sel, ...(state.memories.length
-    ? state.memories.map((m) => h('option', {
-        value: String(m.id),
-        selected: m.id === state.activeMemoryId,
-      }, `${m.name} (${fmtNum(m.count)})`))
-    : [h('option', { value: '' }, '（暂无记忆库）')]));
+  const opts = state.memories.map((m) => h('option', {
+    value: String(m.id),
+    selected: m.id === state.activeMemoryId,
+  }, `${m.name} (${fmtNum(m.count)})`));
+
+  if (state.session) {
+    opts.unshift(h('option', {
+      value: SESSION_ID,
+      selected: state.activeMemoryId === SESSION_ID,
+    }, `总记忆库 · 临时 ${fmtNum(state.session.units.length)} 条（未写入）`));
+  }
+  if (!opts.length) opts.push(h('option', { value: '' }, '（暂无记忆库）'));
+
+  mount(sel, ...opts);
   sel.value = state.activeMemoryId == null ? '' : String(state.activeMemoryId);
 }
 
@@ -115,6 +188,8 @@ async function updateStorageStat() {
   mount(el,
     h('div', `${state.memories.length} 个记忆库`),
     h('div', `${fmtNum(total)} 条单元`),
+    state.session ? h('div', { style: { color: 'var(--warn)' } },
+      `+ 临时 ${fmtNum(state.session.units.length)} 条`) : null,
     u && u.quota ? h('div.mute', `已用 ${fmtBytes(u.usage)} / ${fmtBytes(u.quota)}`) : null);
 }
 
@@ -124,17 +199,7 @@ export function renderView() {
   const mod = VIEWS[state.view] || VIEWS.workbench;
   let node;
   try {
-    node = mod.render({
-      state,
-      refreshMemories,
-      loadActiveIndex,
-      setActiveMemory,
-      refresh: () => renderView(),
-      importPairs: doImport,
-      importTmxFile,
-      exportActiveMemory,
-      setView,
-    });
+    node = mod.render(ctxForViews());
   } catch (err) {
     console.error(err);
     node = h('div.card', h('h2', '视图渲染出错'), h('pre.mono', String(err && err.stack || err)));
@@ -153,7 +218,13 @@ function setView(name) {
 /* ---------------------------------------------------------- import / export */
 
 export async function importTmxFile(file) {
-  const text = await readText(file);
+  let text;
+  try {
+    text = await readMaybeGzip(file);          // handles .tmx, .xml and .tmx.gz
+  } catch (err) {
+    toast('读取失败：' + err.message, 'err');
+    return;
+  }
   let parsed;
   try {
     parsed = parseTmx(text);
@@ -305,33 +376,28 @@ export async function exportActiveMemory(format = 'tmx') {
 /* ------------------------------------------------------------------- start */
 
 async function firstRunCheck() {
-  if (state.memories.length) return;
+  if (state.memories.length || state.session) return;
+  const cfg = state.config || {};
+  const hasMaster = masterAvailable(cfg);
 
-  // The bundled single-file build embeds the demo memory, because fetch() is
-  // blocked when a page is opened from the filesystem.
-  const loadDemoText = async () => {
-    if (typeof globalThis.__RPC_CAT_DEMO_TMX === 'string' && globalThis.__RPC_CAT_DEMO_TMX) {
-      return globalThis.__RPC_CAT_DEMO_TMX;
-    }
-    const res = await fetch('data/demo-tm.tmx');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.text();
-  };
-
-  let available = false;
+  // Offer the small demo memory, which needs no gate.
+  let demoAvailable = false;
   try {
     if (typeof globalThis.__RPC_CAT_DEMO_TMX === 'string' && globalThis.__RPC_CAT_DEMO_TMX) {
-      available = true;
+      demoAvailable = true;
     } else {
       const res = await fetch('data/demo-tm.tmx', { method: 'HEAD' });
-      available = res.ok;
+      demoAvailable = res.ok;
     }
-  } catch { available = false; }
-  if (!available) return;
+  } catch { demoAvailable = false; }
+
+  if (!demoAvailable && !hasMaster) return;
 
   const loadDemo = async () => {
     try {
-      const text = await loadDemoText();
+      const text = (typeof globalThis.__RPC_CAT_DEMO_TMX === 'string' && globalThis.__RPC_CAT_DEMO_TMX)
+        ? globalThis.__RPC_CAT_DEMO_TMX
+        : await (await fetch('data/demo-tm.tmx')).text();
       const parsed = parseTmx(text);
       const pairs = toPairs(parsed, { srcLang: 'en-US', tgtLang: 'zh-CN' });
       await doImport(pairs, {
@@ -343,25 +409,59 @@ async function firstRunCheck() {
     }
   };
 
+  const actions = [{ label: '稍后', onClick: (close) => close() }];
+  if (hasMaster) {
+    actions.push({
+      label: '载入总记忆库…',
+      primary: !demoAvailable,
+      onClick: async (close) => {
+        close();
+        await openMasterGate(ctxForViews());
+      },
+    });
+  }
+  if (demoAvailable) {
+    actions.push({
+      label: '载入示例记忆库',
+      primary: hasMaster ? false : true,
+      onClick: async (close) => { close(); await loadDemo(); },
+    });
+  }
+
   modal({
     title: '开始使用',
     body: h('div',
       h('p', '还没有任何记忆库。你可以：'),
       h('ul', { style: { paddingLeft: '20px', color: 'var(--text-dim)' } },
-        h('li', '导入自己的 TMX（顶部「导入 TMX」）'),
+        h('li', '导入自己的 TMX / TMX.GZ（顶部「导入 TMX」）'),
         h('li', '在「对齐制作」里粘贴中英原文，自动生成 TMX'),
-        h('li', '载入内置的 RPC Authority 示例记忆库试用')),
+        hasMaster
+          ? h('li', `载入内置的${cfg.master && cfg.master.name ? cfg.master.name : '总记忆库'}`
+              + `（${fmtNum((cfg.master && cfg.master.units) || 0)} 条，需要管理员口令）`)
+          : null,
+        demoAvailable ? h('li', '载入内置示例记忆库（660 条，无需口令）') : null),
       h('p.tiny', '全部数据只保存在你自己的浏览器里，不会上传到任何服务器。'),
     ),
-    actions: [
-      { label: '稍后', onClick: (close) => close() },
-      {
-        label: '载入示例记忆库',
-        primary: true,
-        onClick: async (close) => { close(); await loadDemo(); },
-      },
-    ],
+    actions,
   });
+}
+
+/** The same context object app.renderView() hands to views. */
+function ctxForViews() {
+  return {
+    state,
+    refreshMemories,
+    loadActiveIndex,
+    setActiveMemory,
+    refresh: () => renderView(),
+    importPairs: doImport,
+    importTmxFile,
+    exportActiveMemory,
+    loadSessionMemory,
+    clearSessionMemory,
+    openMasterGate,
+    setView,
+  };
 }
 
 export async function main() {
@@ -381,7 +481,8 @@ export async function main() {
     btn.addEventListener('click', () => setView(btn.dataset.view));
   }
   document.getElementById('activeMemory').addEventListener('change', (e) => {
-    const id = e.target.value ? Number(e.target.value) : null;
+    const raw = e.target.value;
+    const id = raw === SESSION_ID ? SESSION_ID : (raw ? Number(raw) : null);
     setActiveMemory(id);
   });
   document.getElementById('btnImportTmx').addEventListener('click', async () => {
@@ -408,10 +509,16 @@ export async function main() {
     renderView();
   });
 
+  // config first: the first-run dialog needs to know whether a master memory
+  // exists and what the licence text says
+  state.config = await loadConfig();
+
   await refreshMemories();
   renderView();
   await firstRunCheck();
-  if (state.activeMemoryId) await loadActiveIndex({ silent: true });
+  if (state.activeMemoryId && state.activeMemoryId !== SESSION_ID) {
+    await loadActiveIndex({ silent: true });
+  }
 }
 
 function showHelp() {
@@ -419,23 +526,33 @@ function showHelp() {
     wide: true,
     title: '使用说明',
     body: h('div',
+      h('h3', '原格式会被保留'),
+      h('p.dim', '粘贴原文后按行解析：换行、空行、缩进、列表与标题标记、'
+        + '||表格行||、[[code]] 代码块、[[module]] / [[include]] 等标记都原样保留。'
+        + '代码块整块不翻译也不断句，导出的是可以直接贴回 Wikidot 的完整文件；'
+        + '未翻译的句子会保留原文，不会丢内容。'),
+      h('h3', '总记忆库'),
+      h('p.dim', '「设置 → 总记忆库」可载入完整的 29,271 条中英记忆库。'
+        + '需要勾选授权条款并输入管理员口令，口令向站点管理员索取。'
+        + '可以选择「写入本机记忆库」（长期保留）或「只本次使用，不写入」'
+        + '（仅放在内存里查证，关掉页面即消失）。'),
       h('h3', '工作台'),
-      h('p.dim', '粘贴英文原文（支持 Wikidot 语法），系统按句切分，并为每一句自动从记忆库中查找匹配（100% 精确 + 模糊匹配）。填入译文后按 Ctrl+Enter 确认并跳到下一句。译文只保存在浏览器里。'),
+      h('p.dim', '逐句翻译，每句自动从当前记忆库检索匹配（100% 精确 + 模糊百分比），'
+        + '点一下即填入。译文漏掉原文编号时会就地提示。'
+        + 'Ctrl+Enter 确认并跳到下一句。'),
       h('h3', '对齐制作'),
-      h('p.dim', '分别粘贴英文原文与中文译文，点「自动对齐」。算法按段落、再按句子做单调对齐；可以手动合并/拆分/改配，确认后直接存入记忆库或导出 TMX。'),
-      h('h3', '记忆库'),
-      h('p.dim', '导入/导出 TMX，检索、编辑、删除条目，查看统计，合并去重。'),
-      h('h3', '语料库'),
-      h('p.dim', '管理翻译项目（双语对照），可继续翻译、导出 TMX 或纯译文。'),
+      h('p.dim', '分别粘贴中英原文，点「自动对齐」。算法按段落、再按句子做单调对齐；'
+        + '可以手动合并、拆分、改配，确认后存入记忆库或导出 TMX。代码块与标记行不参与对齐。'),
+      h('h3', '记忆库 / 语料库'),
+      h('p.dim', '导入导出 TMX（含 .tmx.gz）、CSV、JSON，检索编辑去重；'
+        + '翻译项目保存在语料库里，随时继续。'),
       h('h3', '快捷键'),
       h('ul', { style: { paddingLeft: '20px', color: 'var(--text-dim)' } },
         h('li', 'Ctrl+Enter — 确认当前句并跳到下一句'),
-        h('li', 'Alt+↑ / Alt+↓ — 上一句 / 下一句'),
-        h('li', 'Ctrl+K — 打开查证检索'),
-        h('li', 'Esc — 关闭弹窗'),
-      ),
+        h('li', 'Esc — 关闭弹窗')),
       h('h3', '隐私'),
-      h('p.dim', '所有数据保存在浏览器的 IndexedDB 中，不会上传。清除浏览器数据会一并删除，请定期用「导出 TMX」备份。'),
+      h('p.dim', '所有数据保存在浏览器的 IndexedDB 中，不会上传。'
+        + '清除浏览器数据会一并删除，请定期用「导出 TMX」备份。'),
     ),
     actions: [{ label: '知道了', primary: true }],
   });

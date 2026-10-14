@@ -87,7 +87,21 @@ class FakeElement extends FakeNode {
     for (const fn of this._listeners[type] || []) fn({ target: this, preventDefault() {}, ...ev });
   }
   click() { this.dispatch('click'); }
-  setAttribute(k, v) { this.attributes[k] = v; if (k === 'class') { this.className = v; this._classes = new Set(String(v).split(/\s+/).filter(Boolean)); } }
+  setAttribute(k, v) {
+    this.attributes[k] = v;
+    if (k === 'class') {
+      this.className = v;
+      this._classes = new Set(String(v).split(/\s+/).filter(Boolean));
+      return;
+    }
+    // Real DOM reflects certain attributes onto properties — `input.type` is
+    // the one that matters here, since h() sets type via setAttribute.
+    if (k in this) {
+      const cur = this[k];
+      const t = typeof cur;
+      if (t === 'string' || t === 'boolean' || t === 'number') this[k] = v;
+    }
+  }
   getAttribute(k) { return this.attributes[k] ?? null; }
   querySelector() { return null; }
   querySelectorAll() { return []; }
@@ -155,10 +169,19 @@ export function installDom() {
       };
     }
   };
-  globalThis.Blob = class { constructor(parts) { this.parts = parts; } };
-  globalThis.FileReader = class {
-    readAsText() { this.onerror && this.onerror(new Error('not available in shim')); }
-  };
-  globalThis.fetch = async () => { throw new Error('no network in shim'); };
+  // Only fill in what is missing: Node already provides a working Blob,
+  // Response, DecompressionStream and crypto, and master.js needs the real ones
+  // (Blob.stream() is used for gzip decompression).
+  if (typeof globalThis.Blob !== 'function') {
+    globalThis.Blob = class { constructor(parts) { this.parts = parts; } };
+  }
+  if (typeof globalThis.FileReader !== 'function') {
+    globalThis.FileReader = class {
+      readAsText() { this.onerror && this.onerror(new Error('not available in shim')); }
+    };
+  }
+  if (typeof globalThis.fetch !== 'function') {
+    globalThis.fetch = async () => { throw new Error('no network in shim'); };
+  }
   return { document: doc, FakeElement, FakeNode, FakeText };
 }
