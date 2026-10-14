@@ -7,12 +7,14 @@ import { parseTmx, buildTmx, toPairs } from './tmx.js';
 import { MemoryIndex } from './match.js';
 import { loadConfig, openMasterGate, readMaybeGzip, masterAvailable } from './master.js';
 import { loadGlossary } from './glossary.js';
+import { loadAiSettings } from './views/ai.js';
 import {
   h, mount, toast, modal, confirmDialog, downloadText, pickFile, readText,
   fmtNum, fmtBytes,
 } from './ui.js';
 
 import * as workbench from './views/workbench.js';
+import * as aiView from './views/ai.js';
 import * as alignView from './views/align.js';
 import * as memoryView from './views/memory.js';
 import * as corpusView from './views/corpus.js';
@@ -20,6 +22,7 @@ import * as settingsView from './views/settings.js';
 
 const VIEWS = {
   workbench,
+  ai: aiView,
   align: alignView,
   memory: memoryView,
   corpus: corpusView,
@@ -458,7 +461,7 @@ async function firstRunCheck() {
 
 /** The same context object app.renderView() hands to views. */
 function ctxForViews() {
-  return {
+  const ctx = {
     state,
     refreshMemories,
     loadActiveIndex,
@@ -472,6 +475,10 @@ function ctxForViews() {
     openMasterGate,
     setView,
   };
+  // AI helpers, so the workbench does not have to reach into the AI view
+  Object.defineProperty(ctx, 'aiReady', { get: () => aiView.isConfigured() });
+  ctx.aiTranslate = (src, opts) => aiView.translateSentence(ctx, src, opts);
+  return ctx;
 }
 
 export async function main() {
@@ -527,6 +534,8 @@ export async function main() {
   if (state.glossary) {
     console.info(`[rpc-cat] 术语库已载入：${state.glossary.size} 条`);
   }
+  // DeepSeek settings (key/model) live in the local database, not in the repo
+  await loadAiSettings();
 
   await refreshMemories();
   renderView();
@@ -555,6 +564,10 @@ function showHelp() {
       h('p.dim', '逐句翻译，每句自动从当前记忆库检索匹配（100% 精确 + 模糊百分比），'
         + '点一下即填入。译文漏掉原文编号时会就地提示。'
         + 'Ctrl+Enter 确认并跳到下一句。'),
+      h('h3', 'AI 翻译（DeepSeek）'),
+      h('p.dim', '在「AI 翻译」页填入 DeepSeek API Key 即可逐句翻译，'
+        + '每句都会自动带上命中的术语与记忆库参考，按管理局档案体（临床腔）输出。'
+        + 'Key 只存在本机浏览器里。配置后工作台每句话也会多出一个「✦ AI 译」按钮。'),
       h('h3', '对齐制作'),
       h('p.dim', '分别粘贴中英原文，点「自动对齐」。算法按段落、再按句子做单调对齐；'
         + '可以手动合并、拆分、改配，确认后存入记忆库或导出 TMX。代码块与标记行不参与对齐。'),

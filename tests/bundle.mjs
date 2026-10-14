@@ -54,7 +54,7 @@ async function waitFor(fn, ms = 90000) {
 const { document: doc, FakeElement } = installDom();
 installFakeIndexedDB();
 
-const NAV_VIEWS = ['workbench', 'align', 'memory', 'corpus', 'settings'];
+const NAV_VIEWS = ['workbench', 'ai', 'align', 'memory', 'corpus', 'settings'];
 const navButtons = NAV_VIEWS.map((v) => {
   const b = new FakeElement('button');
   b.className = 'nav-item';
@@ -124,7 +124,8 @@ ok('workbench start screen rendered', textOf(view()).includes('工作台'),
 section('nav buttons actually switch views');
 
 const expectations = {
-  workbench: '工作台', align: '对齐制作', memory: '记忆库', corpus: '语料库', settings: '设置',
+  workbench: '工作台', ai: 'AI 翻译', align: '对齐制作',
+  memory: '记忆库', corpus: '语料库', settings: '设置',
 };
 for (const btn of navButtons) {
   btn.dispatch('click');
@@ -356,6 +357,117 @@ section('glossary in settings');
       textOf(view()).slice(0, 200));
   }
   ok('settings offers a term export', !!byText(view(), '导出术语表'));
+}
+
+/* ------------------------------------------------------------- AI translate */
+
+section('AI 翻译：DeepSeek 接入（打桩，不产生费用）');
+
+{
+  await goTo('ai');
+  const body0 = textOf(view());
+  ok('AI view renders', body0.includes('AI 翻译'));
+  ok('AI view explains the clinical register', body0.includes('临床腔'));
+  ok('AI view warns where the key is stored', /只保存在本机浏览器|不会上传/.test(body0),
+    body0.slice(0, 200));
+
+  const inputs = inputsIn(view());
+  const keyInput = inputs.find((i) => i.type === 'password');
+  const tempInput = inputs.find((i) => i.type === 'number');
+  ok('there is an API key field', !!keyInput);
+  ok('there is a temperature control', !!tempInput);
+  ok('there is a model selector', findAll(view(), (n) => n.tagName === 'SELECT').length >= 1);
+
+  if (keyInput) {
+    keyInput.value = 'sk-stub-key';
+    keyInput.dispatch('input');
+  }
+  const saveBtn = byText(view(), '保存');
+  ok('there is a save button', !!saveBtn);
+  if (saveBtn) { saveBtn.dispatch('click'); await settle(20); }
+
+  const area = findAll(view(), (n) => n.tagName === 'TEXTAREA')
+    .find((t) => String(t.placeholder || '').includes('粘贴英文原文'));
+  ok('there is a source box', !!area);
+
+  // stub the API: any request answers with a canned SSE stream
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    const enc = new TextEncoder();
+    const lines = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '管理局' } }] })}\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '已收容该项目。' } }] })}\n`,
+      'data: [DONE]\n',
+    ];
+    let i = 0;
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () => (i < lines.length
+            ? { done: false, value: enc.encode(lines[i++]) }
+            : { done: true, value: undefined }),
+        }),
+      },
+      text: async () => lines.join(''),
+    };
+  };
+
+  if (area) {
+    area.value = 'Containment Protocols: the Authority has contained the anomaly.\n\n'
+      + 'The anomaly requires weekly inspection.';
+    area.dispatch('input');
+
+    const runBtn = byText(view(), '全部翻译');
+    ok('there is a translate button', !!runBtn);
+    if (runBtn) {
+      runBtn.dispatch('click');
+      const done = await waitFor(() => textOf(view()).includes('管理局已收容该项目。'), 30000);
+      ok('a stubbed translation appears in the view', done, textOf(view()).slice(0, 300));
+    }
+
+    ok('the request went to the DeepSeek endpoint',
+      calls.length > 0 && calls[0].url.includes('api.deepseek.com/chat/completions'),
+      JSON.stringify(calls.map((c) => c.url)));
+    ok('the request carried the bearer token',
+      calls.length > 0 && calls[0].init.headers.Authorization === 'Bearer sk-stub-key');
+
+    const sent = calls.length ? JSON.parse(calls[0].init.body) : {};
+    ok('the system prompt asks for 临床腔',
+      JSON.stringify(sent).includes('临床腔'), JSON.stringify(sent).slice(0, 200));
+    ok('the glossary was injected into the prompt',
+      JSON.stringify(sent).includes('术语表'), JSON.stringify(sent).slice(0, 400));
+    ok('the source sentence is in the prompt',
+      JSON.stringify(sent).includes('Containment Protocols'));
+    ok('streaming was requested', sent.stream === true);
+    ok('one request per sentence', calls.length === 2, `calls=${calls.length}`);
+  }
+
+  // the key must persist across a view switch (stored in IndexedDB)
+  await goTo('workbench');
+  await goTo('ai');
+  const keyAfter = inputsIn(view()).find((i) => i.type === 'password');
+  ok('the API key was persisted locally', !!keyAfter && keyAfter.value === 'sk-stub-key',
+    keyAfter ? JSON.stringify(keyAfter.value) : 'no field');
+
+  // and the workbench should now offer a per-sentence AI button
+  await goTo('workbench');
+  const wbArea = findAll(view(), (n) => n.tagName === 'TEXTAREA')[0];
+  const wbStart = byText(view(), '开始翻译');
+  if (wbArea && wbStart) {
+    wbArea.value = 'The Authority maintains containment.';
+    wbArea.dispatch('input');
+    wbStart.dispatch('click');
+    await settle(20);
+    const aiBtns = buttonsIn(view()).filter((b) => textOf(b).includes('AI 译'));
+    ok('workbench offers a per-sentence AI button now that a key exists',
+      aiBtns.length >= 1, `found ${aiBtns.length}`);
+  }
+
+  globalThis.fetch = realFetch;
 }
 
 report();

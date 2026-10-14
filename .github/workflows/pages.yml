@@ -32,6 +32,7 @@ jobs:
           node tests/run.mjs
           node tests/document.mjs
           node tests/glossary.mjs
+          node tests/ai.mjs
           node tests/master.mjs
           node tests/smoke.mjs
           node tests/db.mjs

@@ -324,6 +324,41 @@ function renderSentence(ctx, sentence, idx, bi) {
     row.append(box);
   }
 
+  // one-click AI translation for this sentence, with the same context injection
+  if (ctx.aiReady) {
+    const toolRow = h('div.row.tight', { style: { marginTop: '6px' } });
+
+    const doAi = async () => {
+      if (aiBtn.disabled) return;
+      aiBtn.disabled = true;
+      const old = aiBtn.textContent;
+      aiBtn.textContent = '翻译中…';
+      try {
+        const prev = idx > 0 && wb.flat[idx - 1] ? wb.flat[idx - 1].sentence.src : '';
+        const next = wb.flat[idx + 1] ? wb.flat[idx + 1].sentence.src : '';
+        const out = await ctx.aiTranslate(sentence.src, { prev, next });
+        if (!out) throw new Error('模型返回了空内容');
+        ta.value = out;
+        sentence.tgt = out;
+        row.classList.add('done');
+        renderStats();
+        updateBlockState(bi);
+      } catch (err) {
+        toast('AI 翻译失败：' + err.message, 'err');
+      } finally {
+        aiBtn.disabled = false;
+        aiBtn.textContent = old;
+      }
+    };
+
+    const aiBtn = h('button.btn.sm', {
+      title: '用 DeepSeek 翻译本句（临床腔，自动带上术语与记忆库）',
+      onclick: doAi,
+    }, sentence.tgt.trim() ? '✦ 重译' : '✦ AI 译');
+    toolRow.append(aiBtn);
+    row.append(toolRow);
+  }
+
   ta.addEventListener('input', () => {
     sentence.tgt = ta.value;
     row.classList.toggle('done', !!sentence.tgt.trim());

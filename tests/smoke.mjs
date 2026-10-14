@@ -46,7 +46,9 @@ const match = await tryImport('match.js', '../js/match.js');
 const dbmod = await tryImport('db.js', '../js/db.js');
 const glossary = await tryImport('glossary.js', '../js/glossary.js');
 const docmod = await tryImport('document.js', '../js/document.js');
+const aimod = await tryImport('ai.js', '../js/ai.js');
 const workbench = await tryImport('views/workbench.js', '../js/views/workbench.js');
+const aiView = await tryImport('views/ai.js', '../js/views/ai.js');
 const alignView = await tryImport('views/align.js', '../js/views/align.js');
 const memoryView = await tryImport('views/memory.js', '../js/views/memory.js');
 const corpusView = await tryImport('views/corpus.js', '../js/views/corpus.js');
@@ -64,6 +66,8 @@ for (const [mod, names, label] of [
   [dbmod, ['openDb', 'listMemories', 'addUnits', 'getUnits', 'saveDocument'], 'db'],
   [glossary, ['loadGlossary', 'Glossary', 'getGlossary'], 'glossary'],
   [docmod, ['parseDocument', 'reconstruct', 'documentStats', 'collectPairs', 'flattenSentences'], 'document'],
+  [aimod, ['buildMessages', 'streamChat', 'translateOnce', 'cleanTranslation', 'describeError'], 'ai'],
+  [aiView, ['render', 'loadAiSettings', 'translateSentence', 'isConfigured'], 'ai view'],
   [workbench, ['render', 'openProject'], 'workbench'],
   [alignView, ['render', 'collectPairs'], 'align view'],
   [memoryView, ['render'], 'memory view'],
@@ -112,8 +116,8 @@ const ctx = {
 };
 
 for (const [label, mod] of [
-  ['workbench', workbench], ['align', alignView], ['memory', memoryView],
-  ['corpus', corpusView], ['settings', settingsView],
+  ['workbench', workbench], ['ai', aiView], ['align', alignView],
+  ['memory', memoryView], ['corpus', corpusView], ['settings', settingsView],
 ]) {
   if (!mod) continue;
   try {
@@ -134,8 +138,8 @@ const emptyCtx = {
   state: { ...ctx.state, memories: [], activeMemoryId: null, activeMemory: null, index: null },
 };
 for (const [label, mod] of [
-  ['workbench', workbench], ['align', alignView], ['memory', memoryView],
-  ['corpus', corpusView], ['settings', settingsView],
+  ['workbench', workbench], ['ai', aiView], ['align', alignView],
+  ['memory', memoryView], ['corpus', corpusView], ['settings', settingsView],
 ]) {
   if (!mod) continue;
   try {
